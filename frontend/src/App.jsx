@@ -1,17 +1,17 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
-import "./App.css";
+
+import { useState, useRef, useEffect } from "react";
+import Home from "./components/Home";
+import AuthModal from "./components/AuthModal";
+import Dashboard from "./components/Dashboard";
+import { Routes, Route } from "react-router";
 
 function App() {
-  const [count, setCount] = useState(0);
-
   return (
-    <>
-      <div>
-        <h1 className="text-3xl underline">Hello world!</h1>
-      </div>
-    </>
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/authmodal" element={<AuthModal />} />
+      <Route path="/dashboard" element={<Dashboard />} />
+    </Routes>
   );
 }
 
