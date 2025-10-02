@@ -2,10 +2,11 @@
 import fetch from "node-fetch";
 
 /**
- * Call the Gemini API with a user prompt and optional tools.
- * @param {string} prompt - The user's message
- * @param {Array} tools - Optional list of tools available for MCP
- * @returns {Promise<Object>} - Gemini response { text, tool_call }
+ * Calls the Gemini API to generate content.
+ *
+ * @param {string} prompt - The text prompt to send to the model.
+ * @param {Array<Object>} tools - Optional array of tools/functions to enable.
+ * @returns {Promise<{text: string, tool_call: any}>} - The response text and any tool call (currently null).
  */
 export const callGeminiAPI = async (prompt, tools = []) => {
   try {
@@ -13,43 +14,47 @@ export const callGeminiAPI = async (prompt, tools = []) => {
       throw new Error("GEMINI_API_KEY is not set in environment variables.");
     }
 
-    // ✅ Updated Gemini API endpoint (Google Vertex AI)
-    const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta2/models/gemini-2.5-pro:generateMessage",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.GEMINI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          prompt: {
-            text: prompt,
+    // ✅ Stable model name
+    const modelName = "gemini-2.5-flash";
+
+    // ✅ API endpoint with key as query param
+    const endpoint = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
           },
-          // You can include tools or instructions as "context" if needed
-          candidateCount: 1, // return 1 response
-        }),
-      }
-    );
+        ],
+      }),
+    });
 
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+      // Log full response body for debugging
+      const errorBody = await response.text();
+      throw new Error(
+        `Gemini API error: ${response.status} ${response.statusText}. Details: ${errorBody}`
+      );
     }
 
     const data = await response.json();
 
-    // The Gemini API response may have messages in data.candidates[0].content
-    const message = data?.candidates?.[0]?.content
-      ?.map(c => c.text)
-      .join(" ") || "Sorry, I could not process your request.";
+    const message =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Sorry, I could not process your request.";
 
-    // Return a structure compatible with your MCP flow
-    return {
-      text: message,
-      tool_call: null, // You can parse tool calls if you pass structured prompts
-    };
+    return { text: message, tool_call: null };
   } catch (err) {
-    console.error("❌ Error calling Gemini API:", err);
-    return { text: "Sorry, I could not process your request.", tool_call: null };
+    console.error("❌ Error calling Gemini API:", err.message);
+    return {
+      text: "Sorry, I could not process your request.",
+      tool_call: null,
+    };
   }
 };

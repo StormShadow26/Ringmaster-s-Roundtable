@@ -13,7 +13,7 @@ function App() {
       <Route path="/" element={<Home />} />
       <Route path="/authmodal" element={<AuthModal />} />
       <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/chat" element={<Chat />} />
+      <Route path="/chat" element={<Chat/>} />
     </Routes>
   );
 }
