@@ -31,7 +31,6 @@ function registerTool(name, schema, handler) {
   });
 }
 
-// ✅ Function to invoke tool manually
 server.invokeTool = async (name, args) => {
   if (!toolRegistry.has(name)) {
     throw new Error(`Tool ${name} not registered`);
@@ -39,7 +38,7 @@ server.invokeTool = async (name, args) => {
   return toolRegistry.get(name)(args);
 };
 
-// --- Register our weather tool once ---
+
 registerTool(
   "getWeatherDataByCityName",
   {
