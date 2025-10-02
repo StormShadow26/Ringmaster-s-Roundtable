@@ -11,6 +11,10 @@ function App() {
       <Route path="/" element={<Home />} />
       <Route path="/authmodal" element={<AuthModal />} />
       <Route path="/dashboard" element={<Dashboard />} />
+<<<<<<< Updated upstream
+=======
+      <Route path="/chat" element={<Chat/>} />
+>>>>>>> Stashed changes
     </Routes>
   );
 }
