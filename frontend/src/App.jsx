@@ -12,6 +12,10 @@ function App() {
       <Route path="/authmodal" element={<AuthModal />} />
       <Route path="/dashboard" element={<Dashboard />} />
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+      <Route path="/chat" element={<Chat/>} />
+>>>>>>> Stashed changes
 =======
       <Route path="/chat" element={<Chat/>} />
 >>>>>>> Stashed changes
