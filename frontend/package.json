@@ -13,6 +13,7 @@
     "@react-oauth/google": "^0.12.2",
     "@reduxjs/toolkit": "^2.9.0",
     "@tailwindcss/vite": "^4.1.13",
+    "axios": "^1.12.2",
     "dom": "^0.0.3",
     "dotenv": "^17.2.3",
     "gsap": "^3.13.0",
