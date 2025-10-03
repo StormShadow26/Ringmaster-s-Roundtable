@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
+
+
+  
   "scripts": {
     "dev": "nodemon",
     "start": "node index.js"
@@ -23,5 +26,9 @@
     "node-fetch": "^3.3.2",
     "nodemon": "^3.1.10",
     "zod": "^4.1.11"
+    
+   
+   
+   
   }
 }

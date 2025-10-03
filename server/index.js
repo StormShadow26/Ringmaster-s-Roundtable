@@ -4,12 +4,13 @@ import cors from "cors";
 import database from "./database/database.js";
 import userRoutes from "./routes/user.routes.js";
 import mcpRoutes from "./routes/mcp.routes.js";
-import { initMcpServer } from "./mcp/mcpServer.js";
+
 
 
 
 dotenv.config();
 
+// 👉 Add Express wrapper so React frontend can call it
 const app = express();
 const PORT = 5000;
 
@@ -26,25 +27,12 @@ app.use(express.json());
 database.connect();
 
 // Routes
-app.use("/api/v1", userRoutes);
-app.use("/api/v1/mcp", mcpRoutes);
+app.use('/api/v1', userRoutes);
+app.use('/api/v1/mcp', mcpRoutes);
 
-// Simple test endpoint
-app.get("/", (req, res) => {
-  res.send("CORS enabled for all origins!");
-});
-
-// Optional direct weather route for debugging
-app.post("/getWeather", async (req, res) => {
-  const { city } = req.body;
-  const result = await getWeatherByCity(city);
-  res.json(result);
-});
-
-// Start Express server
+// Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Express server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
 
-// ✅ Start your custom MCP server (from /mcp/mcpServer.js)
-initMcpServer();
+
