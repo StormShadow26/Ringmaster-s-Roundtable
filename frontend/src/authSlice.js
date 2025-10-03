@@ -31,9 +31,32 @@ export const googleAuth = (credentialResponse) => async dispatch => {
 
 import { createSlice } from '@reduxjs/toolkit';
 
+// Function to decode JWT and extract user data
+const getUserFromToken = (token) => {
+  if (!token) return null;
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    const payload = JSON.parse(jsonPayload);
+    return {
+      id: payload.id,
+      email: payload.email,
+      googleId: payload.googleId || null,
+      isGoogleUser: !!payload.googleId,
+      jwtToken: token
+    };
+  } catch (err) {
+    return null;
+  }
+};
+
+const storedToken = localStorage.getItem('jwtToken');
 const initialState = {
-  user: null,
-  token: localStorage.getItem('jwtToken') || null,
+  user: getUserFromToken(storedToken),
+  token: storedToken,
   loading: false,
   error: null,
 };

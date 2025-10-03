@@ -15,10 +15,10 @@ import {
 } from "lucide-react";
 
 // Helper to decode Google profile picture from JWT
-function getGoogleProfilePic(user) {
-  if (user && user.googleId && user.jwtToken) {
+function getGoogleProfilePic(user, token) {
+  if (user && user.googleId && token) {
     try {
-      const base64Url = user.jwtToken.split(".")[1];
+      const base64Url = token.split(".")[1];
       const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
       const jsonPayload = decodeURIComponent(
         atob(base64)
@@ -37,18 +37,19 @@ export default function Dashboard() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const user = useSelector((state) => state.auth.user);
+  const token = useSelector((state) => state.auth.token);
 
   // Profile pic logic (Google first, fallback Dicebear)
   const profilePic = useMemo(() => {
     if (!user) return null;
-    let pic = getGoogleProfilePic(user);
+    let pic = getGoogleProfilePic(user, token);
     if (!pic && user.email) {
       pic = `https://api.dicebear.com/7.x/identicon/svg?seed=${encodeURIComponent(
         user.email
       )}`;
     }
     return pic;
-  }, [user]);
+  }, [user, token]);
 
   const handleLogout = () => {
     dispatch(logout());

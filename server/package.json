@@ -2,13 +2,7 @@
   "name": "server",
   "version": "1.0.0",
   "main": "index.js",
-<<<<<<< Updated upstream
   "type": "module",
-=======
-  "type":"module",
-
-  
->>>>>>> Stashed changes
   "scripts": {
     "dev": "nodemon",
     "start": "node index.js"
@@ -18,7 +12,6 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-<<<<<<< Updated upstream
     "@google/genai": "^1.21.0",
     "@modelcontextprotocol/sdk": "^1.18.2",
     "bcryptjs": "^3.0.2",
@@ -30,11 +23,5 @@
     "node-fetch": "^3.3.2",
     "nodemon": "^3.1.10",
     "zod": "^4.1.11"
-=======
-    "@modelcontextprotocol/sdk": "^1.18.2",
-    "express": "^5.1.0",
-    "nodemon": "^3.1.10",
-    "zod": "^3.25.76"
->>>>>>> Stashed changes
   }
 }
