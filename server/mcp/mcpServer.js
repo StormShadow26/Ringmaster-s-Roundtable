@@ -9,12 +9,29 @@ export const server = new McpServer({
 });
 
 // --- Fake weather function ---
-async function getWeatherByCity(city) {
+async function getWeatherByCityAndDate(city, startDate, endDate) {
+  // Here you could later plug in a real weather API (e.g. OpenWeather)
   if (city.toLowerCase() === "london") {
-    return { temp: "15C", condition: "Cloudy" };
+    return {
+      city,
+      startDate,
+      endDate,
+      forecast: [
+        { date: startDate, temp: "15C", condition: "Cloudy" },
+        { date: endDate, temp: "17C", condition: "Light Rain" },
+      ],
+    };
   }
   if (city.toLowerCase() === "delhi") {
-    return { temp: "32C", condition: "Sunny" };
+    return {
+      city,
+      startDate,
+      endDate,
+      forecast: [
+        { date: startDate, temp: "32C", condition: "Sunny" },
+        { date: endDate, temp: "34C", condition: "Hot & Dry" },
+      ],
+    };
   }
   return { error: `No weather data for ${city}` };
 }
@@ -38,21 +55,23 @@ server.invokeTool = async (name, args) => {
   return toolRegistry.get(name)(args);
 };
 
-
+// --- Register getWeatherDataByCityName tool with startDate & endDate ---
 registerTool(
   "getWeatherDataByCityName",
   {
     city: z.string(),
+    startDate: z.string(), // e.g. "2025-10-01"
+    endDate: z.string(),   // e.g. "2025-10-05"
   },
-  async ({ city }) => {
-    const result = await getWeatherByCity(city);
+  async ({ city, startDate, endDate }) => {
+    const result = await getWeatherByCityAndDate(city, startDate, endDate);
     console.error("DEBUG returning:", result);
 
     return {
       content: [
         {
           type: "text",
-          text: JSON.stringify(result),
+          text: JSON.stringify(result, null, 2),
         },
       ],
     };
