@@ -1,20 +1,29 @@
 import { useState } from "react";
 import axios from "axios";
+import TravelSummaryCard from "./TravelSummaryCard";
+import ExamplePrompts from "./ExamplePrompts";
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
 
-    setMessages((prev) => [...prev, { sender: "user", text: input }]);
+    const userMessage = input;
+    setInput("");
+    setIsLoading(true);
+    
+    // Add user message immediately
+    setMessages((prev) => [...prev, { sender: "user", text: userMessage }]);
 
     try {
       const res = await axios.post("http://localhost:5000/api/v1/mcp/chat", {
-        message: input,
+        message: userMessage,
       });
 
+      // Add AI response
       setMessages((prev) => [
         ...prev,
         { sender: "ai", text: res.data.response },
@@ -22,45 +31,110 @@ export default function Chat() {
     } catch (err) {
       setMessages((prev) => [
         ...prev,
-        { sender: "ai", text: "Server error, try again." },
+        { sender: "ai", text: "Sorry, I encountered an error. Please try again." },
       ]);
     }
 
-    setInput("");
+    setIsLoading(false);
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter") sendMessage();
+    if (e.key === "Enter" && !isLoading) sendMessage();
+  };
+
+  const handlePromptClick = (prompt) => {
+    if (isLoading) return;
+    setInput(prompt);
   };
 
   return (
-    <div className="flex flex-col h-[80vh] max-w-xl mx-auto border p-4">
-      <div className="flex-1 overflow-y-auto mb-2">
+    <div className="flex flex-col h-[85vh] max-w-4xl mx-auto border border-gray-200 rounded-xl shadow-lg bg-white">
+      {/* Chat Header */}
+      <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4 rounded-t-xl">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+            <span className="text-lg">🤖</span>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold">AI Travel Assistant</h2>
+            <p className="text-sm text-blue-100">Weather-powered trip planning</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        {messages.length === 0 && (
+          <div className="text-center py-4">
+            <div className="text-6xl mb-4">✈️</div>
+            <h3 className="text-xl font-semibold text-gray-600 mb-2">Ready for your next adventure?</h3>
+            <p className="text-gray-500 mb-6">Ask me to plan a trip, check weather, or suggest activities for any city!</p>
+            <ExamplePrompts onPromptClick={handlePromptClick} />
+          </div>
+        )}
+        
         {messages.map((m, i) => (
           <div
             key={i}
-            className={`my-1 p-2 rounded ${
-              m.sender === "user" ? "bg-blue-200 self-end" : "bg-gray-200 self-start"
-            }`}
+            className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}
           >
-            {m.text}
+            <div className={`max-w-[70%] ${m.sender === "user" ? "order-2" : "order-1"}`}>
+              {m.sender === "user" ? (
+                <div className="bg-blue-500 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-md">
+                  <p className="text-sm">{m.text}</p>
+                </div>
+              ) : (
+                <TravelSummaryCard response={m.text} />
+              )}
+            </div>
           </div>
         ))}
+        
+        {/* Loading Indicator */}
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="max-w-[70%]">
+              <div className="bg-white rounded-xl px-4 py-3 shadow-md border border-gray-200">
+                <div className="flex items-center space-x-2">
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
+                  <span className="text-sm text-gray-500">Planning your perfect trip...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <div className="flex">
-        <input
-          className="flex-1 border p-2 rounded"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type your message..."
-        />
-        <button
-          className="ml-2 px-4 py-2 bg-blue-500 text-white rounded"
-          onClick={sendMessage}
-        >
-          Send
-        </button>
+      {/* Input Area */}
+      <div className="border-t border-gray-200 p-4 bg-white rounded-b-xl">
+        <div className="flex space-x-3">
+          <input
+            className="flex-1 border border-gray-300 rounded-full px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask me to plan a trip, check weather, or find activities..."
+            disabled={isLoading}
+          />
+          <button
+            className={`px-6 py-3 rounded-full font-medium transition-all ${
+              isLoading 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5'
+            }`}
+            onClick={sendMessage}
+            disabled={isLoading || !input.trim()}
+          >
+            {isLoading ? (
+              <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <span>✈️ Send</span>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
