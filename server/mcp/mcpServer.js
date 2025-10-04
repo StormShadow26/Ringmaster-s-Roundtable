@@ -2,13 +2,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import fetch from "node-fetch";
+import fetch from "node-fetch"; // only needed if Node <18
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
-if (!OPENWEATHER_API_KEY) throw new Error("OPENWEATHER_API_KEY not set in .env");
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const FOURSQUARE_API_KEY = process.env.FOURSQUARE_API_KEY;
 const EVENTBRITE_API_KEY = process.env.EVENTBRITE_API_KEY;
@@ -40,7 +39,6 @@ export const server = new McpServer({
   version: "1.0.0",
 });
 
-// --- Fetch weather for city + neighbors ---
 // --- Cache for API results (in-memory cache to reduce API calls) ---
 const attractionCache = new Map();
 const eventsCache = new Map();
@@ -549,29 +547,43 @@ function generateFallbackAttractions(city) {
 // Main function to get events happening during travel dates
 async function getEventsForTrip(city, lat, lon, startDate, endDate) {
   try {
-    console.log(`🎭 Fetching events for ${city} from ${startDate} to ${endDate}`);
+    console.log(`🎭 Fetching events for ${city} from ${startDate} to ${endDate} (Coords: ${lat}, ${lon})`);
     
     // 1. Check cache first
     const cached = getCachedEvents(city, startDate, endDate);
     if (cached) {
+      console.log(`📋 Using cached events for ${city}`);
       return cached;
     }
     
-    // 2. Try real event APIs first
+    // 2. Determine geographic region for API selection
+    const isNorthAmerica = (lat >= 25 && lat <= 71 && lon >= -168 && lon <= -52);
+    const isEurope = (lat >= 35 && lat <= 71 && lon >= -10 && lon <= 60);
+    const isAustralia = (lat >= -50 && lat <= -10 && lon >= 110 && lon <= 180);
+    const isTicketmasterRegion = isNorthAmerica || isEurope || isAustralia;
+    
+    console.log(`🌍 Geographic analysis: ${city} - Ticketmaster coverage: ${isTicketmasterRegion ? 'Yes' : 'Limited'}`);
+    
     let events = null;
     
-    // 3. Try Ticketmaster API first (best for concerts, sports, festivals)
-    if (TICKETMASTER_API_KEY && canMakeAPICall('ticketmaster')) {
+    // 3. Try Ticketmaster API (primarily for NA/EU/AU regions)
+    if (TICKETMASTER_API_KEY && canMakeAPICall('ticketmaster') && isTicketmasterRegion) {
+      console.log(`🎫 Trying Ticketmaster for ${city} (in supported region)`);
       events = await getTicketmasterEvents(city, lat, lon, startDate, endDate);
       if (events && events.length > 0) {
         console.log(`✅ Ticketmaster: Found ${events.length} events for ${city}`);
         setCachedEvents(city, startDate, endDate, events);
         return events;
+      } else {
+        console.log(`📍 Ticketmaster returned no events for ${city} - this is expected for some regions`);
       }
+    } else if (!isTicketmasterRegion) {
+      console.log(`🌏 Skipping Ticketmaster for ${city} - outside primary coverage area (Asia/Africa/South America)`);
     }
     
-    // 4. Try Eventbrite API as backup
+    // 4. Try Eventbrite API as backup (currently limited due to token restrictions)
     if (EVENTBRITE_API_KEY && canMakeAPICall('eventbrite')) {
+      console.log(`🎪 Trying Eventbrite for ${city}`);
       events = await getEventbriteEvents(city, lat, lon, startDate, endDate);
       if (events && events.length > 0) {
         console.log(`✅ Eventbrite: Found ${events.length} events for ${city}`);
@@ -581,7 +593,7 @@ async function getEventsForTrip(city, lat, lon, startDate, endDate) {
     }
     
     // 5. Fallback to curated events database
-    console.log(`⚠️ Using curated events for ${city}`);
+    console.log(`🎨 Using curated events database for ${city} - this ensures users always get relevant event suggestions`);
     events = await getCuratedEventsForCity(city, startDate, endDate);
     
     // Cache even fallback data to improve performance
@@ -596,7 +608,10 @@ async function getEventsForTrip(city, lat, lon, startDate, endDate) {
 
 // Ticketmaster API Integration for concerts, sports, festivals
 async function getTicketmasterEvents(city, lat, lon, startDate, endDate) {
-  if (!TICKETMASTER_API_KEY) return null;
+  if (!TICKETMASTER_API_KEY) {
+    console.log("❌ Ticketmaster API key not found");
+    return null;
+  }
   
   try {
     const radius = '50'; // 50 miles radius
@@ -606,43 +621,70 @@ async function getTicketmasterEvents(city, lat, lon, startDate, endDate) {
     const startDateTime = `${startDate}T00:00:00Z`;
     const endDateTime = `${endDate}T23:59:59Z`;
     
-    // Different event categories
-    const eventCategories = {
-      concerts: 'KZFzniwnSyZfZ7v7nJ', // Music
-      sports: 'KZFzniwnSyZfZ7v7nE',   // Sports  
-      festivals: 'KZFzniwnSyZfZ7v7na', // Arts & Theatre
-      family: 'KZFzniwnSyZfZ7v7n1'    // Family
-    };
+    console.log(`🎫 Fetching Ticketmaster events for ${city} (${lat}, ${lon}) from ${startDate} to ${endDate}`);
     
-    for (const [category, segmentId] of Object.entries(eventCategories)) {
-      try {
-        const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&latlong=${lat},${lon}&radius=${radius}&unit=miles&startDateTime=${startDateTime}&endDateTime=${endDateTime}&segmentId=${segmentId}&size=10&sort=date,asc`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (data._embedded?.events) {
-          data._embedded.events.forEach(event => {
-            events.push({
-              name: event.name,
-              category: category,
-              date: event.dates.start.localDate,
-              time: event.dates.start.localTime || '20:00',
-              venue: event._embedded?.venues?.[0]?.name || 'TBA',
-              description: event.info || `${category.charAt(0).toUpperCase() + category.slice(1)} event in ${city}`,
-              url: event.url,
-              priceRange: event.priceRanges?.[0] ? 
-                `$${event.priceRanges[0].min} - $${event.priceRanges[0].max}` : 
-                'Price varies',
-              type: 'live_event'
-            });
-          });
-        }
-      } catch (err) {
-        console.error(`❌ Error fetching ${category} from Ticketmaster:`, err);
+    // Try a general search first (without segment filtering)
+    try {
+      const generalUrl = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&latlong=${lat},${lon}&radius=${radius}&unit=miles&startDateTime=${startDateTime}&endDateTime=${endDateTime}&size=20&sort=date,asc`;
+      
+      //console.log(`🔍 Ticketmaster URL: ${generalUrl.replace(TICKETMASTER_API_KEY, 'API_KEY_HIDDEN')}`);
+      
+      const response = await fetch(generalUrl);
+      const data = await response.json();
+      
+      console.log(`📊 Ticketmaster response status: ${response.status}`);
+      
+      if (response.status !== 200) {
+        console.error("❌ Ticketmaster API returned non-200 status:", response.status, data);
+        return null;
       }
+      
+      console.log(`📊 Ticketmaster response keys:`, Object.keys(data));
+      
+      if (data._embedded?.events) {
+        console.log(`✅ Found ${data._embedded.events.length} Ticketmaster events`);
+        
+        data._embedded.events.forEach(event => {
+          // Determine category based on classifications
+          let category = 'community';
+          if (event.classifications?.[0]) {
+            const segment = event.classifications[0].segment?.name?.toLowerCase() || '';
+            const genre = event.classifications[0].genre?.name?.toLowerCase() || '';
+            
+            if (segment.includes('music') || genre.includes('music')) {
+              category = 'concerts';
+            } else if (segment.includes('sports')) {
+              category = 'sports';
+            } else if (segment.includes('arts') || segment.includes('theatre')) {
+              category = 'cultural';
+            } else if (genre.includes('festival')) {
+              category = 'festivals';
+            }
+          }
+          
+          events.push({
+            name: event.name,
+            category: category,
+            date: event.dates.start.localDate,
+            time: event.dates.start.localTime || '20:00',
+            venue: event._embedded?.venues?.[0]?.name || 'TBA',
+            url: event.url,
+            priceRange: event.priceRanges?.[0] ? 
+              `$${event.priceRanges[0].min} - $${event.priceRanges[0].max}` : 
+              'Price varies',
+            type: 'live_event',
+            source: 'Ticketmaster'
+          });
+        });
+      } else {
+        console.log("❌ No events found in Ticketmaster response");
+      }
+      
+    } catch (fetchError) {
+      console.error("❌ Ticketmaster fetch error:", fetchError.message);
     }
     
+    console.log(`🎫 Total Ticketmaster events found: ${events.length}`);
     return events.length > 0 ? events.slice(0, 15) : null; // Max 15 events
     
   } catch (err) {
@@ -653,21 +695,51 @@ async function getTicketmasterEvents(city, lat, lon, startDate, endDate) {
 
 // Eventbrite API Integration for local events, workshops, meetups
 async function getEventbriteEvents(city, lat, lon, startDate, endDate) {
-  if (!EVENTBRITE_API_KEY) return null;
+  if (!EVENTBRITE_API_KEY) {
+    console.log("❌ Eventbrite API key not found");
+    return null;
+  }
   
   try {
+    console.log(`🎪 Attempting Eventbrite API for ${city} (${lat}, ${lon}) from ${startDate} to ${endDate}`);
+    
+    // Note: Current Eventbrite token may have limited search access
+    // This is a common issue with free-tier Eventbrite tokens
+    console.log("⚠️ Eventbrite search endpoint not accessible with current token - skipping to curated events");
+    return null;
+    
+    /* EVENTBRITE API CODE (commented due to API limitations)
     const events = [];
     
     // Format dates for Eventbrite API
     const startDateTime = `${startDate}T00:00:00`;
     const endDateTime = `${endDate}T23:59:59`;
     
-    const url = `https://www.eventbriteapi.com/v3/events/search/?location.latitude=${lat}&location.longitude=${lon}&location.within=50km&start_date.range_start=${startDateTime}&start_date.range_end=${endDateTime}&expand=venue&token=${EVENTBRITE_API_KEY}`;
+    // Eventbrite API with correct authorization header
+    const url = `https://www.eventbriteapi.com/v3/events/search/?location.latitude=${lat}&location.longitude=${lon}&location.within=50km&start_date.range_start=${startDateTime}&start_date.range_end=${endDateTime}`;
     
-    const response = await fetch(url);
+    console.log(`🔍 Eventbrite URL: ${url}`);
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${EVENTBRITE_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
     const data = await response.json();
     
+    console.log(`📊 Eventbrite response status: ${response.status}`);
+    console.log(`📊 Eventbrite response keys:`, Object.keys(data));
+    
+    if (response.status !== 200) {
+      console.error("❌ Eventbrite API returned non-200 status:", response.status, data);
+      return null;
+    }
+    
     if (data.events && data.events.length > 0) {
+      console.log(`✅ Found ${data.events.length} Eventbrite events`);
+      
       data.events.forEach(event => {
         // Categorize events based on category or name
         let category = 'community';
@@ -692,12 +764,15 @@ async function getEventbriteEvents(city, lat, lon, startDate, endDate) {
           description: event.description?.text?.substring(0, 200) || `Local ${category} event in ${city}`,
           url: event.url,
           priceRange: event.is_free ? 'Free' : 'Paid event',
-          type: 'community_event'
+          type: 'community_event',
+          source: 'Eventbrite'
         });
       });
     }
     
+    console.log(`🎪 Total Eventbrite events found: ${events.length}`);
     return events.length > 0 ? events.slice(0, 10) : null; // Max 10 events
+    */
     
   } catch (err) {
     console.error("❌ Eventbrite API error:", err);
@@ -716,21 +791,42 @@ async function getCuratedEventsForCity(city, startDate, endDate) {
   
   // Seasonal and cultural events by city
   const curatedEvents = {
-    // India
+    // India - Enhanced coverage
     delhi: [
       { name: "Red Fort Light & Sound Show", category: "cultural", venue: "Red Fort", time: "19:00", priceRange: "₹80-150", description: "Historical light and sound show about Mughal history" },
+      { name: "India Gate Evening Walk", category: "cultural", venue: "India Gate", time: "18:30", priceRange: "Free", description: "Popular evening gathering spot with street food and cultural activities" },
       { name: "Qutub Festival", category: "festivals", venue: "Qutub Minar", time: "18:00", priceRange: "Free", description: "Classical music and dance performances" },
-      { name: "Delhi International Arts Festival", category: "cultural", venue: "Various venues", time: "19:30", priceRange: "₹500-2000", description: "Contemporary arts and performance festival" }
+      { name: "Delhi International Arts Festival", category: "cultural", venue: "Various venues", time: "19:30", priceRange: "₹500-2000", description: "Contemporary arts and performance festival" },
+      { name: "Connaught Place Cultural Events", category: "community", venue: "Connaught Place", time: "19:00", priceRange: "Free-₹200", description: "Regular street performances and cultural shows" }
+    ],
+    dehradun: [
+      { name: "Ganga Aarti at Har Ki Pauri (Haridwar)", category: "cultural", venue: "Har Ki Pauri, Haridwar", time: "18:00", priceRange: "Free", description: "Sacred evening prayer ceremony by the Ganges river" },
+      { name: "Mindrolling Monastery Festival", category: "festivals", venue: "Mindrolling Monastery", time: "15:00", priceRange: "Free", description: "Tibetan Buddhist ceremonies and cultural performances" },
+      { name: "Dehradun Literature Festival", category: "cultural", venue: "Various venues", time: "10:00", priceRange: "Free-₹300", description: "Local authors and literary discussions" },
+      { name: "Forest Research Institute Heritage Walk", category: "cultural", venue: "FRI Campus", time: "16:00", priceRange: "₹50", description: "Guided tour of colonial architecture and forest museum" },
+      { name: "Mussoorie Cultural Evening", category: "concerts", venue: "Mall Road, Mussoorie", time: "19:30", priceRange: "₹200-500", description: "Local folk music and dance performances in the hill station" }
     ],
     mumbai: [
       { name: "Prithvi Theatre Festival", category: "cultural", venue: "Prithvi Theatre", time: "20:00", priceRange: "₹300-800", description: "International theatre festival" },
       { name: "Kala Ghoda Arts Festival", category: "festivals", venue: "Kala Ghoda District", time: "All day", priceRange: "Free", description: "Street art, performances, and cultural events" },
-      { name: "Bollywood Live Concert", category: "concerts", venue: "NSCI Dome", time: "19:00", priceRange: "₹1500-5000", description: "Live Bollywood music performances" }
+      { name: "Bollywood Live Concert", category: "concerts", venue: "NSCI Dome", time: "19:00", priceRange: "₹1500-5000", description: "Live Bollywood music performances" },
+      { name: "Gateway of India Cultural Shows", category: "cultural", venue: "Gateway of India", time: "18:00", priceRange: "Free", description: "Street artists and cultural performances by the iconic monument" }
     ],
     bangalore: [
       { name: "Bangalore Literature Festival", category: "cultural", venue: "Various venues", time: "10:00", priceRange: "Free-₹500", description: "Authors, poets, and literary discussions" },
       { name: "UB City Mall Events", category: "community", venue: "UB City", time: "18:00", priceRange: "Free", description: "Regular cultural performances and exhibitions" },
-      { name: "Lalbagh Flower Show", category: "festivals", venue: "Lalbagh Gardens", time: "09:00", priceRange: "₹30", description: "Beautiful flower exhibitions and garden tours" }
+      { name: "Lalbagh Flower Show", category: "festivals", venue: "Lalbagh Gardens", time: "09:00", priceRange: "₹30", description: "Beautiful flower exhibitions and garden tours" },
+      { name: "Brigade Road Cultural Walk", category: "community", venue: "Brigade Road", time: "19:00", priceRange: "Free", description: "Street music and local artist performances" }
+    ],
+    jaipur: [
+      { name: "Amber Fort Light & Sound Show", category: "cultural", venue: "Amber Fort", time: "19:00", priceRange: "₹200-400", description: "Spectacular light show narrating Rajputana history" },
+      { name: "City Palace Evening Tour", category: "cultural", venue: "City Palace", time: "17:00", priceRange: "₹500-1000", description: "Royal heritage walk with cultural performances" },
+      { name: "Chokhi Dhani Cultural Village", category: "festivals", venue: "Chokhi Dhani", time: "19:00", priceRange: "₹800-1500", description: "Traditional Rajasthani folk performances and cuisine" }
+    ],
+    kolkata: [
+      { name: "Howrah Bridge Evening Walk", category: "cultural", venue: "Howrah Bridge", time: "18:00", priceRange: "Free", description: "Iconic bridge walk with street performances and river views" },
+      { name: "Victoria Memorial Cultural Shows", category: "cultural", venue: "Victoria Memorial", time: "19:00", priceRange: "₹150", description: "Historical exhibitions and cultural events" },
+      { name: "Park Street Music Scene", category: "concerts", venue: "Park Street", time: "20:00", priceRange: "₹300-800", description: "Live music venues and cultural performances" }
     ],
     
     // International
@@ -1033,89 +1129,77 @@ async function planTripBasedOnWeather(city, weatherData) {
 // --- Real Weather Fetcher ---
 async function getWeatherByCityAndDate(city, startDate, endDate) {
   try {
+    // Validate dates
+    if (isNaN(Date.parse(startDate)) || isNaN(Date.parse(endDate))) {
+      return { error: "Invalid date format. Use YYYY-MM-DD." };
+    }
+    if (startDate > endDate) {
+      return { error: "startDate cannot be after endDate." };
+    }
+
+    // 1️⃣ Get coordinates of the city
     const geoRes = await fetch(
       `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(
         city
       )}&limit=1&appid=${OPENWEATHER_API_KEY}`
     );
     const geoData = await geoRes.json();
-    if (!geoData || geoData.length === 0) return { error: `City not found: ${city}` };
+    if (!geoData || geoData.length === 0) {
+      return { error: `City not found: ${city}` };
+    }
     const { lat, lon } = geoData[0];
 
+    // 2️⃣ Get 5-day / 3-hour forecast
     const weatherRes = await fetch(
       `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric`
     );
     const weatherData = await weatherRes.json();
-    if (!weatherData?.list) return { error: "Failed to fetch forecast data" };
+    if (!weatherData?.list) {
+      return { error: "Failed to fetch forecast data" };
+    }
 
-    const forecasts = weatherData.list.filter(f => {
+    // Filter forecasts by date range
+    const forecasts = weatherData.list.filter((f) => {
       const forecastDate = f.dt_txt.split(" ")[0];
       return forecastDate >= startDate && forecastDate <= endDate;
     });
 
+    // 3️⃣ Get neighboring locations (~5 closest)
     const neighborRes = await fetch(
       `https://api.openweathermap.org/data/2.5/find?lat=${lat}&lon=${lon}&cnt=5&appid=${OPENWEATHER_API_KEY}&units=metric`
     );
     const neighborData = await neighborRes.json();
 
-    return { city, forecasts, neighbors: neighborData.list || [] };
+    return {
+      city,
+      coordinates: { lat, lon },
+      startDate,
+      endDate,
+      forecast: forecasts.map((f) => ({
+        date: f.dt_txt,
+        temp: `${f.main.temp} °C`,
+        condition: f.weather[0].description,
+      })),
+      neighbors:
+        neighborData.list?.map((n) => ({
+          city: n.name,
+          temp: `${n.main.temp} °C`,
+          condition: n.weather[0].description,
+        })) || [],
+    };
   } catch (err) {
     console.error("❌ Weather API error:", err);
     return { error: "Failed to fetch weather data." };
   }
 }
 
-// --- Format itinerary by day → location → 3-hour intervals ---
-function formatItinerary(forecasts, neighbors) {
-  const itinerary = {};
-  const timesOfInterest = ["06:00:00", "09:00:00", "12:00:00", "15:00:00", "18:00:00", "21:00:00", "00:00:00"];
-
-  const allLocations = [{ name: "Main City", list: forecasts }, ...neighbors.map(n => ({ name: n.name, list: forecasts }))];
-
-  forecasts.forEach(f => {
-    const [date, time] = f.dt_txt.split(" ");
-    if (!itinerary[date]) itinerary[date] = {};
-
-    allLocations.forEach(loc => {
-      if (!itinerary[date][loc.name]) itinerary[date][loc.name] = [];
-      if (timesOfInterest.includes(time)) {
-        itinerary[date][loc.name].push({
-          time,
-          temp: `${f.main.temp} °C`,
-          condition: f.weather[0].description
-        });
-      }
-    });
-  });
-
-  return itinerary;
-}
-
-// --- Print itinerary in console ---
-function printItinerary(itinerary) {
-  console.log("\n📅 Travel Itinerary (Human Friendly):");
-  let dayCount = 1;
-  for (const date of Object.keys(itinerary)) {
-    console.log(`\nDay ${dayCount} (${date}):`);
-    for (const loc of Object.keys(itinerary[date])) {
-      console.log(`  Location: ${loc}`);
-      itinerary[date][loc].forEach(f => {
-        console.log(`    ${f.time} - Temp: ${f.temp}, Condition: ${f.condition}`);
-      });
-    }
-    dayCount++;
-  }
-
-  // ✅ Print raw JSON "report"
-  console.log("\n🌦️ Final Weather Report (Raw JSON):");
-  console.log(JSON.stringify(itinerary, null, 2));
-}
-
 // --- Tool registry ---
 const toolRegistry = new Map();
 function registerTool(name, schema, handler) {
   toolRegistry.set(name, handler);
-  server.tool(name, schema, async args => handler(args));
+  server.tool(name, schema, async (args) => {
+    return handler(args);
+  });
 }
 
 server.invokeTool = async (name, args) => {
@@ -1129,22 +1213,46 @@ registerTool(
   {
     city: z.string(),
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
-    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
   },
   async ({ city, startDate, endDate }) => {
-    const data = await getWeatherByCityAndDate(city, startDate, endDate);
-    if (data.error) {
-      console.error(`❌ Error: ${data.error}`);
-      return { content: [{ type: "text", text: `❌ Error: ${data.error}` }] };
-    }
-
-    const itinerary = formatItinerary(data.forecasts, data.neighbors);
-
-    // ✅ Print in console
-    printItinerary(itinerary);
+    const result = await getWeatherByCityAndDate(city, startDate, endDate);
+    console.log("DEBUG weather returning:", result);
 
     return {
-      content: [{ type: "text", text: JSON.stringify(itinerary, null, 2) }]
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  }
+);
+
+// --- Register planTripBasedOnWeather tool ---
+registerTool(
+  "planTripBasedOnWeather",
+  {
+    city: z.string(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  },
+  async ({ city, startDate, endDate }) => {
+    // First get weather data
+    const weatherData = await getWeatherByCityAndDate(city, startDate, endDate);
+    
+    // Then plan trip based on weather
+    const travelPlan = await planTripBasedOnWeather(city, weatherData);
+    console.log("DEBUG travel plan returning:", travelPlan);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(travelPlan, null, 2),
+        },
+      ],
     };
   }
 );
