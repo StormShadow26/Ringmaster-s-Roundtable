@@ -10,6 +10,8 @@ dotenv.config();
 const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const FOURSQUARE_API_KEY = process.env.FOURSQUARE_API_KEY;
+const EVENTBRITE_API_KEY = process.env.EVENTBRITE_API_KEY;
+const TICKETMASTER_API_KEY = process.env.TICKETMASTER_API_KEY;
 
 if (!OPENWEATHER_API_KEY) {
   throw new Error("OPENWEATHER_API_KEY not set in .env");
@@ -23,6 +25,14 @@ if (!FOURSQUARE_API_KEY) {
   console.warn("⚠️ FOURSQUARE_API_KEY not set - using fallback attraction data");
 }
 
+// Event APIs are optional - fallback to curated events if not available
+if (!EVENTBRITE_API_KEY) {
+  console.warn("⚠️ EVENTBRITE_API_KEY not set - using fallback event data");
+}
+if (!TICKETMASTER_API_KEY) {
+  console.warn("⚠️ TICKETMASTER_API_KEY not set - using fallback event data");
+}
+
 // Create MCP server
 export const server = new McpServer({
   name: "weatherData",
@@ -31,17 +41,23 @@ export const server = new McpServer({
 
 // --- Cache for API results (in-memory cache to reduce API calls) ---
 const attractionCache = new Map();
+const eventsCache = new Map();
 const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+const EVENTS_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours (events change more frequently)
 
 // --- Rate limiting for APIs ---
 const apiCallTracker = {
   googlePlaces: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) }, // Reset every hour
-  foursquare: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) }
+  foursquare: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) },
+  eventbrite: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) },
+  ticketmaster: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) }
 };
 
 const API_LIMITS = {
   googlePlaces: 100, // Conservative limit per hour
-  foursquare: 50     // Conservative limit per hour
+  foursquare: 50,    // Conservative limit per hour
+  eventbrite: 200,   // Eventbrite is more generous
+  ticketmaster: 100  // Ticketmaster rate limit
 };
 
 function canMakeAPICall(apiName) {
@@ -78,6 +94,26 @@ function setCachedAttractions(city, data) {
     timestamp: Date.now()
   });
   console.log(`💾 Cached attractions for ${city}`);
+}
+
+// --- Events Cache Functions ---
+function getCachedEvents(city, startDate, endDate) {
+  const cacheKey = `${city.toLowerCase()}-${startDate}-${endDate}`;
+  const cached = eventsCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < EVENTS_CACHE_DURATION) {
+    console.log(`📦 Using cached events for ${city} (${startDate} to ${endDate})`);
+    return cached.data;
+  }
+  return null;
+}
+
+function setCachedEvents(city, startDate, endDate, data) {
+  const cacheKey = `${city.toLowerCase()}-${startDate}-${endDate}`;
+  eventsCache.set(cacheKey, {
+    data,
+    timestamp: Date.now()
+  });
+  console.log(`💾 Cached events for ${city} (${startDate} to ${endDate})`);
 }
 
 // --- Helper function to clean and validate attraction names ---
@@ -136,7 +172,9 @@ function getAPIStatus() {
       openweather: !!OPENWEATHER_API_KEY,
       gemini: !!process.env.GEMINI_API_KEY,
       googlePlaces: !!GOOGLE_PLACES_API_KEY,
-      foursquare: !!FOURSQUARE_API_KEY
+      foursquare: !!FOURSQUARE_API_KEY,
+      eventbrite: !!EVENTBRITE_API_KEY,
+      ticketmaster: !!TICKETMASTER_API_KEY
     },
     rateLimits: {
       googlePlaces: {
@@ -148,11 +186,27 @@ function getAPIStatus() {
         used: apiCallTracker.foursquare.calls,
         limit: API_LIMITS.foursquare,
         resetTime: new Date(apiCallTracker.foursquare.resetTime).toISOString()
+      },
+      eventbrite: {
+        used: apiCallTracker.eventbrite.calls,
+        limit: API_LIMITS.eventbrite,
+        resetTime: new Date(apiCallTracker.eventbrite.resetTime).toISOString()
+      },
+      ticketmaster: {
+        used: apiCallTracker.ticketmaster.calls,
+        limit: API_LIMITS.ticketmaster,
+        resetTime: new Date(apiCallTracker.ticketmaster.resetTime).toISOString()
       }
     },
     cache: {
-      entries: attractionCache.size,
-      cities: Array.from(attractionCache.keys())
+      attractions: {
+        entries: attractionCache.size,
+        cities: Array.from(attractionCache.keys())
+      },
+      events: {
+        entries: eventsCache.size,
+        queries: Array.from(eventsCache.keys())
+      }
     }
   };
   
@@ -488,6 +542,351 @@ function generateFallbackAttractions(city) {
   };
 }
 
+// --- EVENTS & FESTIVALS INTEGRATION ---
+
+// Main function to get events happening during travel dates
+async function getEventsForTrip(city, lat, lon, startDate, endDate) {
+  try {
+    console.log(`🎭 Fetching events for ${city} from ${startDate} to ${endDate}`);
+    
+    // 1. Check cache first
+    const cached = getCachedEvents(city, startDate, endDate);
+    if (cached) {
+      return cached;
+    }
+    
+    // 2. Try real event APIs first
+    let events = null;
+    
+    // 3. Try Ticketmaster API first (best for concerts, sports, festivals)
+    if (TICKETMASTER_API_KEY && canMakeAPICall('ticketmaster')) {
+      events = await getTicketmasterEvents(city, lat, lon, startDate, endDate);
+      if (events && events.length > 0) {
+        console.log(`✅ Ticketmaster: Found ${events.length} events for ${city}`);
+        setCachedEvents(city, startDate, endDate, events);
+        return events;
+      }
+    }
+    
+    // 4. Try Eventbrite API as backup
+    if (EVENTBRITE_API_KEY && canMakeAPICall('eventbrite')) {
+      events = await getEventbriteEvents(city, lat, lon, startDate, endDate);
+      if (events && events.length > 0) {
+        console.log(`✅ Eventbrite: Found ${events.length} events for ${city}`);
+        setCachedEvents(city, startDate, endDate, events);
+        return events;
+      }
+    }
+    
+    // 5. Fallback to curated events database
+    console.log(`⚠️ Using curated events for ${city}`);
+    events = await getCuratedEventsForCity(city, startDate, endDate);
+    
+    // Cache even fallback data to improve performance
+    setCachedEvents(city, startDate, endDate, events);
+    return events;
+    
+  } catch (err) {
+    console.error("❌ Error fetching events:", err);
+    return generateFallbackEvents(city, startDate, endDate);
+  }
+}
+
+// Ticketmaster API Integration for concerts, sports, festivals
+async function getTicketmasterEvents(city, lat, lon, startDate, endDate) {
+  if (!TICKETMASTER_API_KEY) return null;
+  
+  try {
+    const radius = '50'; // 50 miles radius
+    const events = [];
+    
+    // Format dates for Ticketmaster API (YYYY-MM-DDTHH:MM:SSZ)
+    const startDateTime = `${startDate}T00:00:00Z`;
+    const endDateTime = `${endDate}T23:59:59Z`;
+    
+    // Different event categories
+    const eventCategories = {
+      concerts: 'KZFzniwnSyZfZ7v7nJ', // Music
+      sports: 'KZFzniwnSyZfZ7v7nE',   // Sports  
+      festivals: 'KZFzniwnSyZfZ7v7na', // Arts & Theatre
+      family: 'KZFzniwnSyZfZ7v7n1'    // Family
+    };
+    
+    for (const [category, segmentId] of Object.entries(eventCategories)) {
+      try {
+        const url = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&latlong=${lat},${lon}&radius=${radius}&unit=miles&startDateTime=${startDateTime}&endDateTime=${endDateTime}&segmentId=${segmentId}&size=10&sort=date,asc`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data._embedded?.events) {
+          data._embedded.events.forEach(event => {
+            events.push({
+              name: event.name,
+              category: category,
+              date: event.dates.start.localDate,
+              time: event.dates.start.localTime || '20:00',
+              venue: event._embedded?.venues?.[0]?.name || 'TBA',
+              description: event.info || `${category.charAt(0).toUpperCase() + category.slice(1)} event in ${city}`,
+              url: event.url,
+              priceRange: event.priceRanges?.[0] ? 
+                `$${event.priceRanges[0].min} - $${event.priceRanges[0].max}` : 
+                'Price varies',
+              type: 'live_event'
+            });
+          });
+        }
+      } catch (err) {
+        console.error(`❌ Error fetching ${category} from Ticketmaster:`, err);
+      }
+    }
+    
+    return events.length > 0 ? events.slice(0, 15) : null; // Max 15 events
+    
+  } catch (err) {
+    console.error("❌ Ticketmaster API error:", err);
+    return null;
+  }
+}
+
+// Eventbrite API Integration for local events, workshops, meetups
+async function getEventbriteEvents(city, lat, lon, startDate, endDate) {
+  if (!EVENTBRITE_API_KEY) return null;
+  
+  try {
+    const events = [];
+    
+    // Format dates for Eventbrite API
+    const startDateTime = `${startDate}T00:00:00`;
+    const endDateTime = `${endDate}T23:59:59`;
+    
+    const url = `https://www.eventbriteapi.com/v3/events/search/?location.latitude=${lat}&location.longitude=${lon}&location.within=50km&start_date.range_start=${startDateTime}&start_date.range_end=${endDateTime}&expand=venue&token=${EVENTBRITE_API_KEY}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.events && data.events.length > 0) {
+      data.events.forEach(event => {
+        // Categorize events based on category or name
+        let category = 'community';
+        const eventName = event.name.text.toLowerCase();
+        
+        if (eventName.includes('concert') || eventName.includes('music') || eventName.includes('band')) {
+          category = 'concerts';
+        } else if (eventName.includes('festival') || eventName.includes('fair')) {
+          category = 'festivals';
+        } else if (eventName.includes('sport') || eventName.includes('game') || eventName.includes('match')) {
+          category = 'sports';
+        } else if (eventName.includes('art') || eventName.includes('exhibition') || eventName.includes('gallery')) {
+          category = 'cultural';
+        }
+        
+        events.push({
+          name: event.name.text,
+          category: category,
+          date: event.start.local.split('T')[0],
+          time: event.start.local.split('T')[1],
+          venue: event.venue?.name || 'Online/TBA',
+          description: event.description?.text?.substring(0, 200) || `Local ${category} event in ${city}`,
+          url: event.url,
+          priceRange: event.is_free ? 'Free' : 'Paid event',
+          type: 'community_event'
+        });
+      });
+    }
+    
+    return events.length > 0 ? events.slice(0, 10) : null; // Max 10 events
+    
+  } catch (err) {
+    console.error("❌ Eventbrite API error:", err);
+    return null;
+  }
+}
+
+// Curated events database for popular cities and general events
+async function getCuratedEventsForCity(city, startDate, endDate) {
+  const cityLower = city.toLowerCase();
+  
+  // Calculate days between dates for seasonal events
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const month = start.getMonth() + 1; // 1-12
+  
+  // Seasonal and cultural events by city
+  const curatedEvents = {
+    // India
+    delhi: [
+      { name: "Red Fort Light & Sound Show", category: "cultural", venue: "Red Fort", time: "19:00", priceRange: "₹80-150", description: "Historical light and sound show about Mughal history" },
+      { name: "Qutub Festival", category: "festivals", venue: "Qutub Minar", time: "18:00", priceRange: "Free", description: "Classical music and dance performances" },
+      { name: "Delhi International Arts Festival", category: "cultural", venue: "Various venues", time: "19:30", priceRange: "₹500-2000", description: "Contemporary arts and performance festival" }
+    ],
+    mumbai: [
+      { name: "Prithvi Theatre Festival", category: "cultural", venue: "Prithvi Theatre", time: "20:00", priceRange: "₹300-800", description: "International theatre festival" },
+      { name: "Kala Ghoda Arts Festival", category: "festivals", venue: "Kala Ghoda District", time: "All day", priceRange: "Free", description: "Street art, performances, and cultural events" },
+      { name: "Bollywood Live Concert", category: "concerts", venue: "NSCI Dome", time: "19:00", priceRange: "₹1500-5000", description: "Live Bollywood music performances" }
+    ],
+    bangalore: [
+      { name: "Bangalore Literature Festival", category: "cultural", venue: "Various venues", time: "10:00", priceRange: "Free-₹500", description: "Authors, poets, and literary discussions" },
+      { name: "UB City Mall Events", category: "community", venue: "UB City", time: "18:00", priceRange: "Free", description: "Regular cultural performances and exhibitions" },
+      { name: "Lalbagh Flower Show", category: "festivals", venue: "Lalbagh Gardens", time: "09:00", priceRange: "₹30", description: "Beautiful flower exhibitions and garden tours" }
+    ],
+    
+    // International
+    paris: [
+      { name: "Seine River Evening Cruise", category: "cultural", venue: "Seine River", time: "20:30", priceRange: "€25-60", description: "Illuminated monuments cruise with dinner option" },
+      { name: "Louvre Late Night Opening", category: "cultural", venue: "Louvre Museum", time: "18:00", priceRange: "€17", description: "Extended hours with special exhibitions" },
+      { name: "Moulin Rouge Show", category: "concerts", venue: "Moulin Rouge", time: "21:00", priceRange: "€87-200", description: "Iconic cabaret performance" }
+    ],
+    london: [
+      { name: "West End Theatre Shows", category: "cultural", venue: "Various theatres", time: "19:30", priceRange: "£25-150", description: "World-class musical and drama performances" },
+      { name: "Thames River Jazz Cruise", category: "concerts", venue: "Thames River", time: "19:00", priceRange: "£35-55", description: "Live jazz music while cruising past landmarks" },
+      { name: "Borough Market Food Tours", category: "community", venue: "Borough Market", time: "11:00", priceRange: "£45", description: "Guided food tasting and market exploration" }
+    ],
+    tokyo: [
+      { name: "Robot Restaurant Show", category: "cultural", venue: "Shinjuku", time: "20:00", priceRange: "¥8000", description: "Unique robot and neon performance show" },
+      { name: "Shibuya Sky Observatory", category: "cultural", venue: "Shibuya Sky", time: "18:00", priceRange: "¥1800", description: "360-degree city views and sunset experience" },
+      { name: "Traditional Tea Ceremony", category: "cultural", venue: "Various temples", time: "14:00", priceRange: "¥3000", description: "Authentic Japanese tea ceremony experience" }
+    ]
+  };
+  
+  // Get events for the city or use generic events
+  let cityEvents = curatedEvents[cityLower] || generateGenericCityEvents(city);
+  
+  // Add seasonal events based on month
+  const seasonalEvents = getSeasonalEvents(city, month);
+  cityEvents = [...cityEvents, ...seasonalEvents];
+  
+  // Format events with dates during the trip
+  const tripEvents = [];
+  const tripDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+  
+  cityEvents.forEach((event, index) => {
+    // Distribute events across trip dates
+    const dayOffset = index % tripDays;
+    const eventDate = new Date(start);
+    eventDate.setDate(start.getDate() + dayOffset);
+    
+    tripEvents.push({
+      ...event,
+      date: eventDate.toISOString().split('T')[0],
+      type: 'curated_event'
+    });
+  });
+  
+  return tripEvents.slice(0, 8); // Max 8 curated events
+}
+
+// Generate seasonal events based on month
+function getSeasonalEvents(city, month) {
+  const seasonalEvents = [];
+  
+  // Winter events (Dec, Jan, Feb)
+  if ([12, 1, 2].includes(month)) {
+    seasonalEvents.push({
+      name: `${city} Winter Festival`,
+      category: "festivals",
+      venue: "City Center",
+      time: "17:00",
+      priceRange: "Free",
+      description: "Winter celebrations with lights and local culture"
+    });
+  }
+  
+  // Spring events (Mar, Apr, May)
+  if ([3, 4, 5].includes(month)) {
+    seasonalEvents.push({
+      name: `${city} Spring Cultural Festival`,
+      category: "festivals", 
+      venue: "Public Gardens",
+      time: "11:00",
+      priceRange: "Free-$20",
+      description: "Spring celebrations with outdoor performances"
+    });
+  }
+  
+  // Summer events (Jun, Jul, Aug)
+  if ([6, 7, 8].includes(month)) {
+    seasonalEvents.push({
+      name: `${city} Summer Concert Series`,
+      category: "concerts",
+      venue: "Outdoor Amphitheater",
+      time: "19:30",
+      priceRange: "$25-75",
+      description: "Outdoor summer concerts and music festivals"
+    });
+  }
+  
+  // Fall events (Sep, Oct, Nov) 
+  if ([9, 10, 11].includes(month)) {
+    seasonalEvents.push({
+      name: `${city} Harvest Festival`,
+      category: "festivals",
+      venue: "Market Square", 
+      time: "10:00",
+      priceRange: "Free",
+      description: "Autumn harvest celebrations and local food markets"
+    });
+  }
+  
+  return seasonalEvents;
+}
+
+// Generate generic events for any city
+function generateGenericCityEvents(city) {
+  return [
+    {
+      name: `${city} Walking Tour`,
+      category: "cultural",
+      venue: "City Center",
+      time: "10:00",
+      priceRange: "$15-30",
+      description: `Guided historical walking tour of ${city}'s main attractions`
+    },
+    {
+      name: `${city} Food Market`,
+      category: "community", 
+      venue: "Local Market",
+      time: "09:00",
+      priceRange: "Free entry",
+      description: `Local food market with regional specialties and crafts`
+    },
+    {
+      name: `${city} Cultural Center Events`,
+      category: "cultural",
+      venue: "Cultural Center",
+      time: "19:00", 
+      priceRange: "$10-50",
+      description: `Regular cultural performances and art exhibitions`
+    }
+  ];
+}
+
+// Emergency fallback events
+function generateFallbackEvents(city, startDate, endDate) {
+  return [
+    {
+      name: `Explore ${city} Markets`,
+      category: "community",
+      date: startDate,
+      time: "10:00", 
+      venue: "Local Markets",
+      description: `Visit local markets and experience ${city}'s culture`,
+      priceRange: "Free",
+      type: "suggested_activity"
+    },
+    {
+      name: `${city} Evening Walk`,
+      category: "cultural",
+      date: startDate,
+      time: "18:00",
+      venue: "City Center", 
+      description: `Evening stroll through ${city}'s historic areas`,
+      priceRange: "Free",
+      type: "suggested_activity"
+    }
+  ];
+}
+
 // --- Travel Planner Function ---
 async function planTripBasedOnWeather(city, weatherData) {
   try {
@@ -499,6 +898,9 @@ async function planTripBasedOnWeather(city, weatherData) {
     const lat = weatherData.coordinates?.lat || 0;
     const lon = weatherData.coordinates?.lon || 0;
     const places = await getAttractionsForCity(city, lat, lon);
+
+    // Get events happening during the trip dates  
+    const events = await getEventsForTrip(city, lat, lon, weatherData.startDate, weatherData.endDate);
 
     const recommendations = [];
     const forecast = weatherData.forecast || [];
@@ -547,9 +949,60 @@ async function planTripBasedOnWeather(city, weatherData) {
       reason: "Great evening options regardless of weather!"
     });
 
+    // Add events happening during the trip if available
+    if (events && events.length > 0) {
+      // Group events by category
+      const eventsByCategory = {
+        concerts: events.filter(e => e.category === 'concerts'),
+        festivals: events.filter(e => e.category === 'festivals'),  
+        sports: events.filter(e => e.category === 'sports'),
+        cultural: events.filter(e => e.category === 'cultural'),
+        community: events.filter(e => e.category === 'community')
+      };
+
+      // Add event recommendations
+      if (eventsByCategory.concerts.length > 0) {
+        recommendations.push({
+          category: "🎵 Live Concerts & Music",
+          places: eventsByCategory.concerts.slice(0, 3).map(e => `${e.name} - ${e.venue} (${e.date})`),
+          reason: `${eventsByCategory.concerts.length} concerts happening during your visit!`,
+          events: eventsByCategory.concerts.slice(0, 3)
+        });
+      }
+
+      if (eventsByCategory.festivals.length > 0) {
+        recommendations.push({
+          category: "🎭 Festivals & Celebrations", 
+          places: eventsByCategory.festivals.slice(0, 3).map(e => `${e.name} - ${e.venue} (${e.date})`),
+          reason: `${eventsByCategory.festivals.length} festivals and celebrations during your trip!`,
+          events: eventsByCategory.festivals.slice(0, 3)
+        });
+      }
+
+      if (eventsByCategory.sports.length > 0) {
+        recommendations.push({
+          category: "⚽ Sports & Games",
+          places: eventsByCategory.sports.slice(0, 2).map(e => `${e.name} - ${e.venue} (${e.date})`),
+          reason: `${eventsByCategory.sports.length} exciting sports events to watch!`,
+          events: eventsByCategory.sports.slice(0, 2)
+        });
+      }
+
+      if (eventsByCategory.cultural.length > 0 || eventsByCategory.community.length > 0) {
+        const culturalEvents = [...eventsByCategory.cultural, ...eventsByCategory.community];
+        recommendations.push({
+          category: "🎨 Cultural Events & Activities",
+          places: culturalEvents.slice(0, 3).map(e => `${e.name} - ${e.venue} (${e.date})`),
+          reason: `${culturalEvents.length} cultural activities and local experiences!`,
+          events: culturalEvents.slice(0, 3)
+        });
+      }
+    }
+
     return {
       city,
       travelPeriod: `${weatherData.startDate} to ${weatherData.endDate}`,
+      coordinates: weatherData.coordinates || { lat: 0, lon: 0 },
       weatherSummary: {
         totalDays: forecast.length > 0 ? Math.ceil(forecast.length / 8) : 0,
         sunnyDays: Math.ceil(sunnyDays.length / 8),
@@ -557,11 +1010,14 @@ async function planTripBasedOnWeather(city, weatherData) {
         cloudyDays: Math.ceil(cloudyDays.length / 8)
       },
       recommendations,
+      locations: places,
+      events: events || [], // Include all events in response
       availableAttractions: {
         totalOutdoor: (places.outdoor || []).length + (places.beaches || []).length + (places.adventure || []).length,
         totalIndoor: (places.indoor || []).length,
         totalHeritage: (places.heritage || []).length,
-        totalNightlife: (places.nightlife || []).length
+        totalNightlife: (places.nightlife || []).length,
+        totalEvents: (events || []).length
       },
       weatherDetails: weatherData
     };

@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const TravelSummaryCard = ({ response }) => {
+const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Check if this is a travel planning response (contains keywords)
@@ -30,6 +30,10 @@ const TravelSummaryCard = ({ response }) => {
     if (titleLower.includes('heritage') || titleLower.includes('culture')) return '🏰';
     if (titleLower.includes('adventure') || titleLower.includes('activity')) return '🎢';
     if (titleLower.includes('night') || titleLower.includes('dining')) return '🍽️';
+    if (titleLower.includes('concerts') || titleLower.includes('music')) return '🎵';
+    if (titleLower.includes('festivals') || titleLower.includes('celebrations')) return '🎭';
+    if (titleLower.includes('sports') || titleLower.includes('games')) return '⚽';
+    if (titleLower.includes('cultural events') || titleLower.includes('activities')) return '🎨';
     if (titleLower.includes('day') && titleLower.includes('1')) return '1️⃣';
     if (titleLower.includes('day') && titleLower.includes('2')) return '2️⃣';
     if (titleLower.includes('day') && titleLower.includes('3')) return '3️⃣';
@@ -38,7 +42,7 @@ const TravelSummaryCard = ({ response }) => {
     return '📍';
   };
 
-  // Parse travel response for better presentation
+  // Parse travel response for better presentation and extract map data
   const parseResponse = (text) => {
     const lines = text.split('\n').filter(line => line.trim());
     const parsed = {
@@ -46,10 +50,37 @@ const TravelSummaryCard = ({ response }) => {
       summary: '',
       sections: [],
       weather: '',
-      recommendations: []
+      recommendations: [],
+      city: '',
+      coordinates: null,
+      locations: {
+        outdoor: [],
+        indoor: [],
+        heritage: [],
+        adventure: [],
+        nightlife: [],
+        beaches: []
+      }
     };
 
     let currentSection = '';
+    
+    // Extract city name from the response (look for common patterns)
+    const cityPattern = /(?:trip to|visit|travel to|in|for) ([A-Za-z\s]+?)(?:\s|,|from|between|$)/i;
+    const cityMatch = text.match(cityPattern);
+    if (cityMatch) {
+      parsed.city = cityMatch[1].trim();
+    }
+    
+    // Try to extract coordinates if mentioned in the response
+    const coordPattern = /latitude[:\s]+([0-9.-]+)[,\s]+longitude[:\s]+([0-9.-]+)/i;
+    const coordMatch = text.match(coordPattern);
+    if (coordMatch) {
+      parsed.coordinates = {
+        lat: parseFloat(coordMatch[1]),
+        lon: parseFloat(coordMatch[2])
+      };
+    }
     
     for (let line of lines) {
       line = line.trim();
@@ -79,7 +110,27 @@ const TravelSummaryCard = ({ response }) => {
       
       // Items under sections
       if (currentSection && parsed.sections.length > 0) {
-        parsed.sections[parsed.sections.length - 1].items.push(line.replace(/^-\s*|\*\s*/, ''));
+        const item = line.replace(/^-\s*|\*\s*/, '');
+        parsed.sections[parsed.sections.length - 1].items.push(item);
+        
+        // Extract locations based on section type and add to locations object
+        const sectionLower = currentSection.toLowerCase();
+        if (sectionLower.includes('outdoor') || sectionLower.includes('park') || sectionLower.includes('nature')) {
+          parsed.locations.outdoor.push(item);
+        } else if (sectionLower.includes('indoor') || sectionLower.includes('museum') || sectionLower.includes('gallery')) {
+          parsed.locations.indoor.push(item);
+        } else if (sectionLower.includes('heritage') || sectionLower.includes('historic') || sectionLower.includes('culture')) {
+          parsed.locations.heritage.push(item);
+        } else if (sectionLower.includes('adventure') || sectionLower.includes('activity') || sectionLower.includes('sport')) {
+          parsed.locations.adventure.push(item);
+        } else if (sectionLower.includes('night') || sectionLower.includes('dining') || sectionLower.includes('restaurant')) {
+          parsed.locations.nightlife.push(item);
+        } else if (sectionLower.includes('beach') || sectionLower.includes('water')) {
+          parsed.locations.beaches.push(item);
+        } else {
+          // Default to outdoor if we can't categorize
+          parsed.locations.outdoor.push(item);
+        }
       } else {
         // General recommendations or summary
         if (line.length > 10) {
@@ -92,9 +143,11 @@ const TravelSummaryCard = ({ response }) => {
   };
 
   const parsedData = parseResponse(response);
+  
+  // Since map is now shown separately, we don't need map data in the card
 
   return (
-    <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-100 rounded-xl p-6 shadow-xl border border-emerald-200 max-w-3xl backdrop-blur-sm">
+    <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-100 rounded-xl p-6 shadow-xl border border-emerald-200 max-w-4xl backdrop-blur-sm">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center space-x-3">

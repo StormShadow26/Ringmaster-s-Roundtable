@@ -81,12 +81,24 @@ router.post("/chat", async (req, res) => {
 
       const travelPlanText = toolResponse.content.map((c) => c.text).join("\n");
 
+      // Parse the structured data from the tool response
+      let travelData = null;
+      try {
+        travelData = JSON.parse(travelPlanText);
+      } catch (e) {
+        console.warn("Could not parse travel data as JSON, using text response only");
+      }
+
       // Step 3: Send tool output back to Gemini for a polished travel plan
       const finalResponse = await callGeminiAPI(
         `User asked to plan a trip to ${city} from ${startDate} to ${endDate}. Here's the weather-based travel plan: ${travelPlanText}. Please format this into a nice, readable trip itinerary for the user.`
       );
 
-      return res.json({ response: finalResponse.text });
+      // Return both the AI response and structured data for map integration
+      return res.json({ 
+        response: finalResponse.text,
+        travelData: travelData // Include structured data if available
+      });
     }
 
     // Step 4: Otherwise just return Gemini's reply

@@ -1,6 +1,6 @@
 import React from "react";
 import Login from "./Login";
-import Register from "./Login"; // Assuming Register is a separate component
+import Register from "./Register"; // Fixed: Import Register from correct file
 import { gsap } from "gsap";
 import { useState,useRef,useEffect } from "react";
 
