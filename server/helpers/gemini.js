@@ -1,4 +1,3 @@
-// backend/helpers/gemini.js
 import fetch from "node-fetch";
 
 export const callGeminiAPI = async (prompt, tools = []) => {

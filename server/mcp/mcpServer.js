@@ -79,7 +79,7 @@ function formatItinerary(forecasts, neighbors) {
 
 // --- Print itinerary in console ---
 function printItinerary(itinerary) {
-  console.log("\n📅 Travel Itinerary:");
+  console.log("\n📅 Travel Itinerary (Human Friendly):");
   let dayCount = 1;
   for (const date of Object.keys(itinerary)) {
     console.log(`\nDay ${dayCount} (${date}):`);
@@ -91,6 +91,10 @@ function printItinerary(itinerary) {
     }
     dayCount++;
   }
+
+  // ✅ Print raw JSON "report"
+  console.log("\n🌦️ Final Weather Report (Raw JSON):");
+  console.log(JSON.stringify(itinerary, null, 2));
 }
 
 // --- Tool registry ---
