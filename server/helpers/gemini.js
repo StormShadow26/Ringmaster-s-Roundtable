@@ -2,13 +2,16 @@ import fetch from "node-fetch";
 
 export const callGeminiAPI = async (prompt, tools = []) => {
   try {
+    // 🔹 Check for API key
     if (!process.env.GEMINI_API_KEY) {
       throw new Error("❌ GEMINI_API_KEY not set in environment");
     }
 
+    // 🔹 Define model and endpoint properly
     const modelName = "gemini-2.5-flash";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
 
+    // 🔹 Request body setup
     const requestBody = {
       contents: [
         {
@@ -17,16 +20,17 @@ export const callGeminiAPI = async (prompt, tools = []) => {
         },
       ],
       generationConfig: {
-        candidateCount: 1,
-        temperature: 0.7, // optional: controls creativity
+        candidateCount: 1, // generates only a single response
+        temperature: 0.3,  // Controls randomness/creativity
       },
     };
 
-    // If tools are defined, add them
+    // 🔹 Add tools only if present
     if (tools.length) {
       requestBody.tools = [{ functionDeclarations: tools }];
     }
 
+    // 🔹 Perform the API request
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -36,6 +40,7 @@ export const callGeminiAPI = async (prompt, tools = []) => {
       body: JSON.stringify(requestBody),
     });
 
+    // 🔹 Handle non-OK responses
     if (!response.ok) {
       const errBody = await response.text();
       throw new Error(
@@ -43,9 +48,10 @@ export const callGeminiAPI = async (prompt, tools = []) => {
       );
     }
 
+    // 🔹 Parse JSON
     const data = await response.json();
 
-    // 🔎 Extract text response
+    // 🔹 Extract text response safely
     let textResponse = null;
     if (data?.candidates?.[0]?.content?.parts) {
       textResponse = data.candidates[0].content.parts
@@ -54,7 +60,7 @@ export const callGeminiAPI = async (prompt, tools = []) => {
         .trim();
     }
 
-    // 🔎 Extract tool call if present
+    // 🔹 Extract tool call if present
     const toolCallPart = data?.candidates?.[0]?.content?.parts?.find(
       (p) => p.functionCall
     );
@@ -69,6 +75,7 @@ export const callGeminiAPI = async (prompt, tools = []) => {
       };
     }
 
+    // 🔹 Normal return
     return {
       text: textResponse || "Sorry, I could not process your request.",
       tool_call: null,

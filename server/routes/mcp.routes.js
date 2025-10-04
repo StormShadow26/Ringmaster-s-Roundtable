@@ -31,7 +31,8 @@ router.post("/chat", async (req, res) => {
       },
       {
         name: "planTripBasedOnWeather",
-        description: "Plan a complete trip to a city based on weather conditions between given dates. This tool automatically gets weather data and suggests places to visit based on weather patterns.",
+        description:
+          "Plan a complete trip to a city based on weather conditions between given dates. This tool automatically gets weather data and suggests places to visit based on weather patterns.",
         parameters: {
           type: "object",
           properties: {
@@ -51,16 +52,22 @@ router.post("/chat", async (req, res) => {
     ]);
 
     // Step 2: Handle tool calls
-    if (geminiResponse.tool_call?.name === "getWeatherDataByCityName") {
-      const { city, startDate, endDate } = geminiResponse.tool_call.arguments;
+    const toolCall = geminiResponse.tool_call;
+
+    // 🧩 CASE 1: Weather Tool
+    if (toolCall?.name === "getWeatherDataByCityName") {
+      const { city, startDate, endDate } = toolCall.arguments || {};
       console.log("🛠 Weather tool called with:", { city, startDate, endDate });
 
-      const toolResponse = await mcpServer.invokeTool(
-        "getWeatherDataByCityName",
-        { city, startDate, endDate }
-      );
+      const toolResponse = await mcpServer.invokeTool("getWeatherDataByCityName", {
+        city,
+        startDate,
+        endDate,
+      });
 
-      const weatherText = toolResponse.content.map((c) => c.text).join("\n");
+      const weatherText =
+        toolResponse?.content?.map((c) => c.text).join("\n") ||
+        "No weather data returned.";
 
       // Step 3: Send tool output back to Gemini for a polished reply
       const finalResponse = await callGeminiAPI(
@@ -70,16 +77,20 @@ router.post("/chat", async (req, res) => {
       return res.json({ response: finalResponse.text });
     }
 
-    if (geminiResponse.tool_call?.name === "planTripBasedOnWeather") {
-      const { city, startDate, endDate } = geminiResponse.tool_call.arguments;
+    // 🧩 CASE 2: Trip Planning Tool
+    if (toolCall?.name === "planTripBasedOnWeather") {
+      const { city, startDate, endDate } = toolCall.arguments || {};
       console.log("🛠 Travel planning tool called with:", { city, startDate, endDate });
 
-      const toolResponse = await mcpServer.invokeTool(
-        "planTripBasedOnWeather",
-        { city, startDate, endDate }
-      );
+      const toolResponse = await mcpServer.invokeTool("planTripBasedOnWeather", {
+        city,
+        startDate,
+        endDate,
+      });
 
-      const travelPlanText = toolResponse.content.map((c) => c.text).join("\n");
+      const travelPlanText =
+        toolResponse?.content?.map((c) => c.text).join("\n") ||
+        "No travel plan returned.";
 
       // Step 3: Send tool output back to Gemini for a polished travel plan
       const finalResponse = await callGeminiAPI(
@@ -89,7 +100,7 @@ router.post("/chat", async (req, res) => {
       return res.json({ response: finalResponse.text });
     }
 
-    // Step 4: Otherwise just return Gemini's reply
+    // Step 4: If no tool is called, return Gemini’s direct response
     res.json({ response: geminiResponse.text });
   } catch (err) {
     console.error("❌ Chat error:", err);

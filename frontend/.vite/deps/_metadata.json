@@ -2,60 +2,60 @@
   "hash": "b7fbccfd",
   "configHash": "aab523d0",
   "lockfileHash": "20195e3f",
-  "browserHash": "1e3c2c8d",
+  "browserHash": "f8e5a471",
   "optimized": {
     "react": {
       "src": "../../node_modules/react/index.js",
       "file": "react.js",
-      "fileHash": "23ed42f5",
+      "fileHash": "a499ff65",
       "needsInterop": true
     },
     "react-dom/client": {
       "src": "../../node_modules/react-dom/client.js",
       "file": "react-dom_client.js",
-      "fileHash": "b81bccd6",
+      "fileHash": "ecb4814f",
       "needsInterop": true
     },
     "react-router": {
       "src": "../../node_modules/react-router/dist/development/index.mjs",
       "file": "react-router.js",
-      "fileHash": "703e5d1e",
+      "fileHash": "3ff459da",
       "needsInterop": false
     },
     "react-redux": {
       "src": "../../node_modules/react-redux/dist/react-redux.mjs",
       "file": "react-redux.js",
-      "fileHash": "a30e9050",
+      "fileHash": "c71bdddb",
       "needsInterop": false
     },
     "@reduxjs/toolkit": {
       "src": "../../node_modules/@reduxjs/toolkit/dist/redux-toolkit.modern.mjs",
       "file": "@reduxjs_toolkit.js",
-      "fileHash": "537599ea",
-      "needsInterop": false
-    },
-    "gsap": {
-      "src": "../../node_modules/gsap/index.js",
-      "file": "gsap.js",
-      "fileHash": "0d6d7f47",
-      "needsInterop": false
-    },
-    "lucide-react": {
-      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
-      "file": "lucide-react.js",
-      "fileHash": "f388f6c9",
+      "fileHash": "6444b6f0",
       "needsInterop": false
     },
     "axios": {
       "src": "../../node_modules/axios/index.js",
       "file": "axios.js",
-      "fileHash": "5bb6168a",
+      "fileHash": "2a97d75e",
+      "needsInterop": false
+    },
+    "gsap": {
+      "src": "../../node_modules/gsap/index.js",
+      "file": "gsap.js",
+      "fileHash": "0e177a69",
+      "needsInterop": false
+    },
+    "lucide-react": {
+      "src": "../../node_modules/lucide-react/dist/esm/lucide-react.js",
+      "file": "lucide-react.js",
+      "fileHash": "25b79955",
       "needsInterop": false
     },
     "@react-oauth/google": {
       "src": "../../node_modules/@react-oauth/google/dist/index.esm.js",
       "file": "@react-oauth_google.js",
-      "fileHash": "48c03585",
+      "fileHash": "1f57972f",
       "needsInterop": false
     }
   },
