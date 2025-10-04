@@ -17,8 +17,8 @@ export const callGeminiAPI = async (prompt, tools = []) => {
         },
       ],
       generationConfig: {
-        candidateCount: 1,
-        temperature: 0.7, // optional: controls creativity
+        candidateCount: 1,  // generates only single response
+        temperature: 0.3, // Controls randomness/creativity of the response
       },
     };
 
