@@ -3,16 +3,58 @@ import { useState } from "react";
 const EventsCard = ({ events, city, travelPeriod }) => {
   const [expandedEvent, setExpandedEvent] = useState(null);
 
-  if (!events || events.length === 0) return null;
+  // Comprehensive error handling
+  try {
+    console.log('EventsCard received:', { events, city, travelPeriod });
+    
+    if (!events) {
+      console.log('EventsCard: No events provided');
+      return null;
+    }
+    
+    if (!Array.isArray(events)) {
+      console.log('EventsCard: Events is not an array:', typeof events, events);
+      return (
+        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded">
+          <p className="text-sm">Events data is not in expected format</p>
+        </div>
+      );
+    }
+    
+    if (events.length === 0) {
+      console.log('EventsCard: No events in array');
+      return null;
+    }
+    
+    console.log(`EventsCard: Processing ${events.length} events`);
+    
+  } catch (error) {
+    console.error('EventsCard initialization error:', error);
+    return (
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <p className="font-bold">Error initializing events display</p>
+        <p className="text-sm">{error.message}</p>
+      </div>
+    );
+  }
 
   // Group events by category for better organization  
-  const groupedEvents = {
-    concerts: events.filter(e => e.category === 'concerts'),
-    festivals: events.filter(e => e.category === 'festivals'),
-    sports: events.filter(e => e.category === 'sports'), 
-    cultural: events.filter(e => e.category === 'cultural'),
-    community: events.filter(e => e.category === 'community')
-  };
+  const groupedEvents = {};
+  try {
+    groupedEvents.concerts = events.filter(e => e && e.category === 'concerts');
+    groupedEvents.festivals = events.filter(e => e && e.category === 'festivals');
+    groupedEvents.sports = events.filter(e => e && e.category === 'sports');
+    groupedEvents.cultural = events.filter(e => e && e.category === 'cultural');
+    groupedEvents.community = events.filter(e => e && e.category === 'community');
+  } catch (filterError) {
+    console.error('EventsCard: Error filtering events by category:', filterError);
+    // Fallback: put all events in cultural category
+    groupedEvents.cultural = events || [];
+    groupedEvents.concerts = [];
+    groupedEvents.festivals = [];
+    groupedEvents.sports = [];
+    groupedEvents.community = [];
+  }
 
   // Get category styling
   const getCategoryStyle = (category) => {

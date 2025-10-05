@@ -1,22 +1,42 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 
 const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Check if this is a travel planning response (contains keywords)
-  const isTravelResponse = response.toLowerCase().includes('trip') || 
-                          response.toLowerCase().includes('weather') || 
-                          response.toLowerCase().includes('visit') ||
-                          response.toLowerCase().includes('attractions') ||
-                          response.toLowerCase().includes('itinerary');
-
-  // If not a travel response, show simple text
-  if (!isTravelResponse) {
+  // Add error boundary at component level
+  if (!response) {
     return (
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg p-4 shadow-md border border-blue-200">
-        <div className="text-gray-800 leading-relaxed">
-          {response}
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <p className="font-bold">No response data available</p>
+      </div>
+    );
+  }
+
+  try {
+    // Check if this is a travel planning response (contains keywords)
+    const isTravelResponse = response.toLowerCase().includes('trip') || 
+                            response.toLowerCase().includes('weather') || 
+                            response.toLowerCase().includes('visit') ||
+                            response.toLowerCase().includes('attractions') ||
+                            response.toLowerCase().includes('itinerary');
+
+    // If not a travel response, show simple text
+    if (!isTravelResponse) {
+      return (
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg p-4 shadow-md border border-blue-200">
+          <div className="text-gray-800 leading-relaxed">
+            {response}
+          </div>
         </div>
+      );
+    }
+  } catch (error) {
+    console.error('Error in TravelSummaryCard:', error);
+    return (
+      <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        <p className="font-bold">Error rendering travel summary</p>
+        <p className="text-sm">{error.message}</p>
+        <p className="text-sm mt-2">Raw response: {String(response)}</p>
       </div>
     );
   }
@@ -44,6 +64,22 @@ const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
 
   // Parse travel response for better presentation and extract map data
   const parseResponse = (text) => {
+    // Handle case where text might not be a string
+    if (!text || typeof text !== 'string') {
+      console.log('TravelSummaryCard parseResponse: Invalid text input:', typeof text, text);
+      return {
+        title: 'Travel Information',
+        summary: 'Unable to parse travel response',
+        sections: [],
+        recommendations: ['Please try asking again for travel recommendations'],
+        city: '',
+        coordinates: null,
+        weather: 'Weather information not available',
+        attractions: [],
+        dailyPlans: {}
+      };
+    }
+    
     const lines = text.split('\n').filter(line => line.trim());
     const parsed = {
       title: '',

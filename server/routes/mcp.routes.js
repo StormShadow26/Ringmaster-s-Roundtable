@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post("/chat", async (req, res) => {
   const { message } = req.body;
-
+  console.log("message is:",message);
   try {
     // Step 1: Send user input + tool definitions to Gemini
     const geminiResponse = await callGeminiAPI(message, [

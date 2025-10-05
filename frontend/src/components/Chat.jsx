@@ -2,14 +2,15 @@ import { useState } from "react";
 import axios from "axios";
 import TravelSummaryCard from "./TravelSummaryCard";
 import ExamplePrompts from "./ExamplePrompts";
-import TravelMap from "./TravelMap";
 import EventsCard from "./EventsCard";
+import RobustTravelMap from "./RobustTravelMap";
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [currentTravelData, setCurrentTravelData] = useState(null);
+  const [error, setError] = useState(null);
 
   const sendMessage = async () => {
     if (!input.trim()) return;
@@ -22,25 +23,31 @@ export default function Chat() {
     setMessages((prev) => [...prev, { sender: "user", text: userMessage }]);
 
     try {
+      setError(null);
       const res = await axios.post("http://localhost:5000/api/v1/mcp/chat", {
         message: userMessage,
       });
+
+      console.log("Server response:", res.data); // Debug log
 
       // Add AI response
       setMessages((prev) => [
         ...prev,
         { 
           sender: "ai", 
-          text: res.data.response,
+          text: res.data.response || "I received your message but couldn't generate a response.",
           travelData: res.data.travelData || null // Include travel data if available
         },
       ]);
 
       // Update map data if this is a travel response
       if (res.data.travelData) {
+        console.log("Setting travel data:", res.data.travelData); // Debug log
         setCurrentTravelData(res.data.travelData);
       }
     } catch (err) {
+      console.error("Chat error:", err);
+      setError(err.message);
       setMessages((prev) => [
         ...prev,
         { sender: "ai", text: "Sorry, I encountered an error. Please try again." },
@@ -99,14 +106,33 @@ export default function Chat() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <TravelSummaryCard response={m.text} travelData={m.travelData} showMapButton={false} />
-                    {m.travelData && m.travelData.events && m.travelData.events.length > 0 && (
-                      <EventsCard 
-                        events={m.travelData.events} 
-                        city={m.travelData.city}
-                        travelPeriod={m.travelData.travelPeriod}
-                      />
-                    )}
+                    {(() => {
+                      try {
+                        console.log(`Rendering message ${i}:`, m);
+                        return (
+                          <>
+                            <TravelSummaryCard response={m.text} travelData={m.travelData} showMapButton={false} />
+                            {m.travelData && m.travelData.events && Array.isArray(m.travelData.events.upcoming) && m.travelData.events.upcoming.length > 0 && (
+                              <EventsCard 
+                                events={m.travelData.events.upcoming} 
+                                city={m.travelData.destination?.city || m.travelData.city || 'Unknown'}
+                                travelPeriod={m.travelData.tripDuration ? `${m.travelData.tripDuration.startDate} to ${m.travelData.tripDuration.endDate}` : 'Travel Period'}
+                              />
+                            )}
+                          </>
+                        );
+                      } catch (error) {
+                        console.error(`Error rendering AI message ${i}:`, error);
+                        console.error('Message data:', m);
+                        return (
+                          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                            <p className="font-bold">Error rendering message</p>
+                            <p className="text-sm">{error.message}</p>
+                            <p className="text-sm mt-2">Raw response: {m.text}</p>
+                          </div>
+                        );
+                      }
+                    })()}
                   </div>
                 )}
               </div>
@@ -173,7 +199,7 @@ export default function Chat() {
                   <span className="text-lg">🗺️</span>
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold">{currentTravelData.city || 'Travel Map'}</h3>
+                  <h3 className="text-lg font-semibold">{currentTravelData.destination?.city || currentTravelData.city || 'Travel Map'}</h3>
                   <p className="text-sm text-emerald-100">Interactive location map</p>
                 </div>
               </div>
@@ -188,12 +214,28 @@ export default function Chat() {
           </div>
 
           {/* Map Area */}
-          <div className="flex-1 p-4">
-            <TravelMap 
-              city={currentTravelData.city}
-              locations={currentTravelData.locations}
-              coordinates={currentTravelData.coordinates}
-            />
+          <div className="flex-1 p-4 overflow-y-auto">
+
+            
+
+            
+
+            
+            {currentTravelData.destination?.coordinates ? (
+              <RobustTravelMap 
+                city={currentTravelData.destination?.city || currentTravelData.city}
+                locations={currentTravelData.attractions?.featured || []}
+                coordinates={currentTravelData.destination?.coordinates}
+              />
+            ) : (
+              <div className="h-full flex items-center justify-center bg-white rounded-lg border-2 border-dashed border-gray-300">
+                <div className="text-center text-gray-500">
+                  <div className="text-4xl mb-3">🗺️</div>
+                  <p className="text-lg font-medium">Map Loading</p>
+                  <p className="text-sm">Coordinate data not available</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
