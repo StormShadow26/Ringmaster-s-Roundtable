@@ -1,9 +1,8 @@
 // services/eventsService.js
 import { getTicketmasterEvents } from '../api/ticketmasterAPI.js';
-import { getEventbriteEvents } from '../api/eventbriteAPI.js';
 import { getCachedEvents, setCachedEvents } from '../utils/cache.js';
 import { curatedEventsByCity, getSeasonalEvents, generateGenericCityEvents, generateFallbackEvents } from '../data/curatedEvents.js';
-import { TICKETMASTER_API_KEY, EVENTBRITE_API_KEY } from '../config/environment.js';
+import { TICKETMASTER_API_KEY } from '../config/environment.js';
 import { canMakeAPICall } from '../utils/rateLimiter.js';
 
 // Main function to get events happening during travel dates
@@ -43,18 +42,7 @@ export async function getEventsForTrip(city, lat, lon, startDate, endDate) {
       console.log(`🌏 Skipping Ticketmaster for ${city} - outside primary coverage area (Asia/Africa/South America)`);
     }
     
-    // 4. Try Eventbrite API as backup (currently limited due to token restrictions)
-    if (EVENTBRITE_API_KEY && canMakeAPICall('eventbrite')) {
-      console.log(`🎪 Trying Eventbrite for ${city}`);
-      events = await getEventbriteEvents(city, lat, lon, startDate, endDate);
-      if (events && events.length > 0) {
-        console.log(`✅ Eventbrite: Found ${events.length} events for ${city}`);
-        setCachedEvents(city, startDate, endDate, events);
-        return events;
-      }
-    }
-    
-    // 5. Fallback to curated events database
+    // 4. Fallback to curated events database
     console.log(`🎨 Using curated events database for ${city} - this ensures users always get relevant event suggestions`);
     events = await getCuratedEventsForCity(city, startDate, endDate);
     

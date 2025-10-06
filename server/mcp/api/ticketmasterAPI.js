@@ -23,7 +23,7 @@ export async function getTicketmasterEvents(city, lat, lon, startDate, endDate) 
     try {
       const generalUrl = `https://app.ticketmaster.com/discovery/v2/events.json?apikey=${TICKETMASTER_API_KEY}&latlong=${lat},${lon}&radius=${radius}&unit=miles&startDateTime=${startDateTime}&endDateTime=${endDateTime}&size=20&sort=date,asc`;
       
-      console.log(`🔍 Ticketmaster URL: ${generalUrl.replace(TICKETMASTER_API_KEY, 'API_KEY_HIDDEN')}`);
+      //console.log(`🔍 Ticketmaster URL: ${generalUrl.replace(TICKETMASTER_API_KEY, 'API_KEY_HIDDEN')}`);
       
       const response = await fetch(generalUrl);
       const data = await response.json();

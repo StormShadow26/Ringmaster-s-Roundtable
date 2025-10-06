@@ -29,7 +29,22 @@ export async function getGooglePlacesAttractions(city, lat, lon) {
               rating: place.rating,
               reviews: place.user_ratings_total,
               description: `Popular ${getCategoryFromGoogleType(type)} in ${city}`,
-              source: 'Google Places'
+              source: 'Google Places',
+              // ✨ ENHANCED: Add complete location data for map pinning
+              place_id: place.place_id,
+              geometry: {
+                location: {
+                  lat: place.geometry.location.lat,
+                  lng: place.geometry.location.lng
+                }
+              },
+              vicinity: place.vicinity,
+              formatted_address: place.formatted_address || place.vicinity,
+              types: place.types,
+              user_ratings_total: place.user_ratings_total,
+              photos: place.photos ? place.photos[0]?.photo_reference : null,
+              price_level: place.price_level,
+              opening_hours: place.opening_hours
             });
           }
         });

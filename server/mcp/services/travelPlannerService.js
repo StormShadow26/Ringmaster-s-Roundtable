@@ -69,27 +69,58 @@ export async function planTripBasedOnWeather(city, weatherData) {
 }
 
 function analyzeWeatherForActivities(forecast) {
+  console.log(`🌤️ Analyzing weather for ${forecast.length} days:`, forecast.map(f => ({ 
+    date: f.dateOnly || f.date.split(' ')[0], 
+    condition: f.condition, 
+    temp: f.temp || f.tempNumeric 
+  })));
+  
   const recommendations = {
     outdoor: [],
     indoor: [],
     general: []
   };
 
+  if (!forecast || forecast.length === 0) {
+    console.log('⚠️ No forecast data to analyze');
+    recommendations.general.push('Weather data unavailable - check conditions locally');
+    return recommendations;
+  }
+
   forecast.forEach(day => {
+    const dateStr = day.dateOnly || day.date.split(' ')[0];
     const condition = day.condition.toLowerCase();
-    const temp = parseFloat(day.temp);
+    const temp = parseFloat(day.tempNumeric || day.temp);
+    
+    console.log(`📅 Analyzing ${dateStr}: ${condition}, ${temp}°C`);
     
     if (condition.includes('rain') || condition.includes('storm')) {
-      recommendations.indoor.push(`${day.date.split(' ')[0]}: Perfect for museums and indoor attractions due to rain`);
+      const message = `${dateStr}: Perfect for museums and indoor attractions due to ${condition}`;
+      recommendations.indoor.push(message);
+      console.log(`🏢 Indoor day: ${message}`);
     } else if (condition.includes('sun') || condition.includes('clear')) {
-      recommendations.outdoor.push(`${day.date.split(' ')[0]}: Great weather for outdoor activities and sightseeing`);
+      const message = `${dateStr}: Great weather for outdoor activities and sightseeing`;
+      recommendations.outdoor.push(message);
+      console.log(`☀️ Outdoor day: ${message}`);
     } else if (temp < 10) {
-      recommendations.general.push(`${day.date.split(' ')[0]}: Cool weather - dress warmly for outdoor activities`);
+      const message = `${dateStr}: Cool weather - dress warmly for outdoor activities`;
+      recommendations.general.push(message);
+      console.log(`🧥 Cool day: ${message}`);
     } else if (temp > 30) {
-      recommendations.general.push(`${day.date.split(' ')[0]}: Hot weather - stay hydrated and seek shade during midday`);
+      const message = `${dateStr}: Hot weather - stay hydrated and seek shade during midday`;
+      recommendations.general.push(message);
+      console.log(`🌡️ Hot day: ${message}`);
     } else {
-      recommendations.general.push(`${day.date.split(' ')[0]}: Pleasant weather for any activities`);
+      const message = `${dateStr}: Pleasant weather for any activities`;
+      recommendations.general.push(message);
+      console.log(`😊 Pleasant day: ${message}`);
     }
+  });
+
+  console.log(`🎯 Weather analysis complete:`, {
+    outdoor: recommendations.outdoor.length,
+    indoor: recommendations.indoor.length,
+    general: recommendations.general.length
   });
 
   return recommendations;

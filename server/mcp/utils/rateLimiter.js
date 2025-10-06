@@ -5,7 +5,6 @@ import { API_LIMITS } from '../config/environment.js';
 const apiCallTracker = {
   googlePlaces: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) }, // Reset every hour
   foursquare: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) },
-  eventbrite: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) },
   ticketmaster: { calls: 0, resetTime: Date.now() + (60 * 60 * 1000) }
 };
 

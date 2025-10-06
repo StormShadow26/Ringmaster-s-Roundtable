@@ -4,13 +4,10 @@ import cors from "cors";
 import database from "./database/database.js";
 import userRoutes from "./routes/user.routes.js";
 import mcpRoutes from "./routes/mcp.routes.js";
-
-
-
+import chatHistoryRoutes from "./routes/chatHistory.routes.js";
 
 dotenv.config();
 
-// 👉 Add Express wrapper so React frontend can call it
 const app = express();
 const PORT = 5000;
 
@@ -29,6 +26,7 @@ database.connect();
 // Routes
 app.use('/api/v1', userRoutes);
 app.use('/api/v1/mcp', mcpRoutes);
+app.use('/api/v1/chat-history', chatHistoryRoutes);
 
 // Start server
 app.listen(PORT, () => {

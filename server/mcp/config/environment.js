@@ -7,7 +7,6 @@ dotenv.config();
 export const OPENWEATHER_API_KEY = process.env.OPENWEATHER_API_KEY;
 export const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 export const FOURSQUARE_API_KEY = process.env.FOURSQUARE_API_KEY;
-export const EVENTBRITE_API_KEY = process.env.EVENTBRITE_API_KEY;
 export const TICKETMASTER_API_KEY = process.env.TICKETMASTER_API_KEY;
 
 // Validate required API keys
@@ -22,9 +21,6 @@ if (!GOOGLE_PLACES_API_KEY) {
 if (!FOURSQUARE_API_KEY) {
   console.warn("⚠️ FOURSQUARE_API_KEY not set - using fallback attraction data");
 }
-if (!EVENTBRITE_API_KEY) {
-  console.warn("⚠️ EVENTBRITE_API_KEY not set - using fallback event data");
-}
 if (!TICKETMASTER_API_KEY) {
   console.warn("⚠️ TICKETMASTER_API_KEY not set - using fallback event data");
 }
@@ -37,6 +33,5 @@ export const EVENTS_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours (events chan
 export const API_LIMITS = {
   googlePlaces: 100, // Conservative limit per hour
   foursquare: 50,    // Conservative limit per hour
-  eventbrite: 200,   // Eventbrite is more generous
   ticketmaster: 100  // Ticketmaster rate limit
 };

@@ -71,11 +71,45 @@ export async function getWeatherByCityAndDate(city, startDate, endDate) {
       return { error: "Weather data not available." };
     }
 
-    // Filter forecasts by date range
-    const forecasts = weatherData.list.filter((f) => {
-      const forecastDate = f.dt_txt.split(" ")[0];
-      return forecastDate >= startDate && forecastDate <= endDate;
+    // Filter and process forecasts by date range
+    console.log(`📅 Requested date range: ${startDate} to ${endDate}`);
+    console.log(`📊 OpenWeatherMap returned ${weatherData.list.length} forecast entries`);
+    
+    const forecasts = [];
+    const processedDates = new Set();
+    
+    // Process each forecast entry
+    weatherData.list.forEach((f) => {
+      const forecastDate = f.dt_txt.split(" ")[0]; // Extract date part (YYYY-MM-DD)
+      const forecastTime = f.dt_txt.split(" ")[1]; // Extract time part (HH:MM:SS)
+      
+      // Only include dates within our range and avoid duplicates (use midday forecast ~12:00)
+      if (forecastDate >= startDate && forecastDate <= endDate) {
+        if (!processedDates.has(forecastDate) || forecastTime === "12:00:00") {
+          // Prefer midday forecast or add if it's the first for this date
+          if (forecastTime === "12:00:00" || !processedDates.has(forecastDate)) {
+            // Remove existing entry if we find a better midday forecast
+            if (processedDates.has(forecastDate)) {
+              const existingIndex = forecasts.findIndex(existing => existing.date.startsWith(forecastDate));
+              if (existingIndex !== -1) forecasts.splice(existingIndex, 1);
+            }
+            
+            forecasts.push({
+              date: f.dt_txt,
+              dateOnly: forecastDate,
+              temp: f.main.temp,
+              condition: f.weather[0].description,
+              humidity: f.main.humidity,
+              windSpeed: f.wind?.speed || 0
+            });
+            processedDates.add(forecastDate);
+          }
+        }
+      }
     });
+    
+    console.log(`✅ Processed ${forecasts.length} daily forecasts for date range`);
+    console.log(`📋 Forecast dates:`, forecasts.map(f => f.dateOnly));
 
     // 3️⃣ Get neighboring locations (~5 closest)
     const neighborRes = await fetch(
@@ -89,9 +123,13 @@ export async function getWeatherByCityAndDate(city, startDate, endDate) {
       startDate,
       endDate,
       forecast: forecasts.map((f) => ({
-        date: f.dt_txt,
-        temp: `${f.main.temp} °C`,
-        condition: f.weather[0].description,
+        date: f.date,
+        dateOnly: f.dateOnly,
+        temp: `${f.temp} °C`,
+        tempNumeric: f.temp,
+        condition: f.condition,
+        humidity: f.humidity,
+        windSpeed: f.windSpeed
       })),
       neighbors:
         neighborData.list?.map((n) => ({

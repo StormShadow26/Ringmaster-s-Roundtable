@@ -62,6 +62,12 @@ const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
     return '📍';
   };
 
+  // Check if a section is a day-based itinerary
+  const isDaySection = (title) => {
+    const titleLower = title.toLowerCase();
+    return titleLower.includes('day ') || titleLower.match(/day\s*\d+/);
+  };
+
   // Parse travel response for better presentation and extract map data
   const parseResponse = (text) => {
     // Handle case where text might not be a string
@@ -183,23 +189,23 @@ const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
   // Since map is now shown separately, we don't need map data in the card
 
   return (
-    <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-100 rounded-xl p-6 shadow-xl border border-emerald-200 max-w-4xl backdrop-blur-sm">
+    <div className="bg-gradient-to-br from-orange-50 via-white to-orange-100 rounded-2xl p-6 shadow-xl border border-orange-200 max-w-5xl backdrop-blur-sm">
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
-            <span className="text-white text-lg">✈️</span>
+      <div className="flex items-start justify-between mb-6">
+        <div className="flex items-center space-x-4">
+          <div className="w-12 h-12 bg-gradient-to-r from-orange-400 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg">
+            <span className="text-white text-xl">✈️</span>
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-emerald-800">
+            <h3 className="text-xl font-bold text-orange-800">
               {parsedData.title || "Travel Recommendations"}
             </h3>
-            <p className="text-sm text-emerald-600">AI-Powered Itinerary</p>
+            <p className="text-sm text-orange-600 font-medium">AI-Powered Itinerary</p>
           </div>
         </div>
         <button
           onClick={() => setIsExpanded(!isExpanded)}
-          className="text-emerald-600 hover:text-emerald-800 transition-colors"
+          className="text-orange-600 hover:text-orange-800 transition-all duration-300 p-2 hover:bg-orange-100 rounded-xl"
         >
           {isExpanded ? '🔼' : '🔽'}
         </button>
@@ -207,23 +213,23 @@ const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
 
       {/* Weather Summary */}
       {parsedData.weather && (
-        <div className="bg-gradient-to-r from-blue-100 to-sky-100 rounded-lg p-4 mb-4 border border-blue-200 shadow-sm">
+        <div className="bg-gradient-to-r from-orange-100 to-amber-100 rounded-xl p-4 mb-6 border border-orange-200 shadow-lg">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm">🌤️</span>
+            <div className="w-10 h-10 bg-gradient-to-r from-orange-400 to-orange-600 rounded-xl flex items-center justify-center shadow-md">
+              <span className="text-white">🌤️</span>
             </div>
             <div>
-              <p className="text-xs text-blue-600 font-medium uppercase tracking-wide">Weather Forecast</p>
-              <p className="text-blue-800 font-medium">{parsedData.weather}</p>
+              <p className="text-xs text-orange-600 font-bold uppercase tracking-wide">Weather Forecast</p>
+              <p className="text-orange-800 font-semibold">{parsedData.weather}</p>
             </div>
           </div>
         </div>
       )}
 
       {/* Quick Summary */}
-      <div className="space-y-2 mb-4">
+      <div className="space-y-3 mb-6">
         {parsedData.recommendations.slice(0, isExpanded ? parsedData.recommendations.length : 2).map((rec, idx) => (
-          <div key={idx} className="text-emerald-800 text-sm leading-relaxed">
+          <div key={idx} className="text-orange-800 leading-relaxed bg-white/50 rounded-xl p-4 border border-orange-100 shadow-sm">
             {rec}
           </div>
         ))}
@@ -231,17 +237,36 @@ const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
 
       {/* Detailed Sections */}
       {isExpanded && parsedData.sections.length > 0 && (
-        <div className="space-y-4 mt-4 border-t border-emerald-200 pt-4">
+        <div className="space-y-6 mt-6 border-t border-orange-200 pt-6">
           {parsedData.sections.map((section, idx) => (
-            <div key={idx} className="bg-white bg-opacity-40 rounded-lg p-4">
-              <h4 className="font-semibold text-emerald-800 mb-3 flex items-center">
-                <span className="text-lg mr-2">{getSectionEmoji(section.title)}</span>
-                {section.title}
-              </h4>
-              <div className="space-y-1">
+            <div 
+              key={idx} 
+              className={`${
+                isDaySection(section.title) 
+                  ? 'bg-gradient-to-r from-orange-100 to-amber-50 border-2 border-orange-300 shadow-lg' 
+                  : 'bg-white/70 border border-orange-200 shadow-md'
+              } rounded-2xl p-6 transition-all duration-300 hover:shadow-xl`}
+            >
+              <div className={`${
+                isDaySection(section.title) 
+                  ? 'bg-gradient-to-r from-orange-400 to-orange-600 text-white' 
+                  : 'bg-orange-50 text-orange-800'
+              } rounded-xl p-3 mb-4 shadow-md`}>
+                <h4 className={`font-bold flex items-center text-lg ${
+                  isDaySection(section.title) ? 'text-white' : 'text-orange-800'
+                }`}>
+                  <span className="text-xl mr-3">{getSectionEmoji(section.title)}</span>
+                  {section.title}
+                </h4>
+              </div>
+              <div className="space-y-3">
                 {section.items.map((item, itemIdx) => (
-                  <div key={itemIdx} className="text-emerald-700 text-sm pl-4 border-l-2 border-emerald-200">
-                    {item}
+                  <div key={itemIdx} className={`${
+                    isDaySection(section.title)
+                      ? 'bg-white/80 border-l-4 border-orange-400 text-orange-900'
+                      : 'bg-orange-50/50 border-l-4 border-orange-300 text-orange-800'
+                  } pl-4 pr-4 py-3 rounded-r-xl shadow-sm hover:shadow-md transition-all duration-200`}>
+                    <span className="font-medium">{item}</span>
                   </div>
                 ))}
               </div>
@@ -254,20 +279,20 @@ const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
       {!isExpanded && (parsedData.sections.length > 0 || parsedData.recommendations.length > 2) && (
         <button
           onClick={() => setIsExpanded(true)}
-          className="w-full mt-3 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors text-sm font-medium"
+          className="w-full mt-4 py-3 bg-gradient-to-r from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 text-white rounded-xl transition-all duration-300 font-bold shadow-lg hover:shadow-xl transform hover:-translate-y-1"
         >
           View Full Itinerary ✨
         </button>
       )}
 
       {/* Action Buttons */}
-      <div className="flex space-x-2 mt-6 pt-4 border-t border-emerald-200">
+      <div className="flex space-x-3 mt-6 pt-6 border-t border-orange-200">
         <button 
           onClick={() => {
             navigator.clipboard.writeText(response);
             // You could add a toast notification here
           }}
-          className="flex-1 py-2 bg-white bg-opacity-70 hover:bg-opacity-90 text-emerald-700 rounded-lg text-sm font-medium transition-all border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md flex items-center justify-center space-x-2"
+          className="flex-1 py-3 bg-white hover:bg-orange-50 text-orange-700 rounded-xl font-semibold transition-all duration-300 border-2 border-orange-200 hover:border-orange-300 shadow-md hover:shadow-lg flex items-center justify-center space-x-2 transform hover:-translate-y-0.5"
         >
           <span>📋</span>
           <span>Copy Itinerary</span>
@@ -285,9 +310,9 @@ const TravelSummaryCard = ({ response, travelData, showMapButton = true }) => {
               navigator.clipboard.writeText(response);
             }
           }}
-          className="flex-1 py-2 bg-white bg-opacity-70 hover:bg-opacity-90 text-emerald-700 rounded-lg text-sm font-medium transition-all border border-emerald-200 hover:border-emerald-300 shadow-sm hover:shadow-md flex items-center justify-center space-x-2"
+          className="flex-1 py-3 bg-white hover:bg-orange-50 text-orange-700 rounded-xl font-semibold transition-all duration-300 border-2 border-orange-200 hover:border-orange-300 shadow-md hover:shadow-lg flex items-center justify-center space-x-2 transform hover:-translate-y-0.5"
         >
-          <span>�</span>
+          <span>📤</span>
           <span>Share</span>
         </button>
       </div>
