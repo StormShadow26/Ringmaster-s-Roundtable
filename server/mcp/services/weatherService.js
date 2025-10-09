@@ -67,6 +67,7 @@ export async function getWeatherByCityAndDate(city, startDate, endDate) {
       `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${OPENWEATHER_API_KEY}&units=metric`
     );
     const weatherData = await weatherRes.json();
+    
 
     if (!weatherData.list) {
       return { error: "Weather data not available." };

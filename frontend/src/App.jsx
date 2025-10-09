@@ -8,6 +8,7 @@ import Explore from "./components/Explore";
 import Transport from "./components/Transport";
 import { Routes, Route } from "react-router";
 import Chat from "./components/Chat";
+import QuizPage from "./components/QuizPage";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/chat" element={<Chat/>} />
         <Route path="/transport" element={<Transport />} />
         <Route path="/explore" element={<Explore />}></Route>
+        <Route path="/quiz" element={<QuizPage/>}></Route>
       </Routes>
     </ErrorBoundary>
   );

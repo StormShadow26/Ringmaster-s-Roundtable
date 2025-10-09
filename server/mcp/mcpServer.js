@@ -90,3 +90,5 @@ export async function initMcpServer() {
   console.log("   📊 Services: Weather, Attractions, Events, Travel Planner");
   console.log("   📚 Data: Curated events & city attractions database");
 }
+
+initMcpServer();
