@@ -42,6 +42,7 @@ export async function getWeatherByCityAndDate(city, startDate, endDate) {
     const geoRes = await fetch(
       `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(geoQuery)}&limit=5&appid=${OPENWEATHER_API_KEY}`
     );
+    
     const geoData = await geoRes.json();
 
     if (!geoData[0]) {

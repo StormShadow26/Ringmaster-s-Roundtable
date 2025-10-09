@@ -4,7 +4,8 @@ import Home from "./components/Home";
 import AuthModal from "./components/AuthModal";
 import Dashboard from "./components/Dashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
-
+import Explore from "./components/Explore";
+import Transport from "./components/Transport";
 import { Routes, Route } from "react-router";
 import Chat from "./components/Chat";
 
@@ -16,6 +17,8 @@ function App() {
         <Route path="/authmodal" element={<AuthModal />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/chat" element={<Chat/>} />
+        <Route path="/transport" element={<Transport />} />
+        <Route path="/explore" element={<Explore />}></Route>
       </Routes>
     </ErrorBoundary>
   );
