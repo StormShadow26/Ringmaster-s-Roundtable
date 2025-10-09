@@ -6,6 +6,7 @@ import EventsCard from "./EventsCard";
 import RobustTravelMap from "./RobustTravelMapFixed";
 import TravelOptionsDisplay from "./TravelOptionsDisplay";
 import AccommodationDisplay from "./AccommodationDisplay";
+import CalendarSyncButton from "./CalendarSyncButton";
 import travelBookingService from "../services/travelBookingService";
 import accommodationService from "../services/accommodationService";
 import travelPlanningUtil from "../utils/travelPlanningUtil";
@@ -30,6 +31,7 @@ export default function Chat() {
   const [showAccommodationModal, setShowAccommodationModal] = useState(false);
   const [accommodationOptions, setAccommodationOptions] = useState(null);
   const [accommodationSearchLoading, setAccommodationSearchLoading] = useState(false);
+  const [showCalendarSync, setShowCalendarSync] = useState(false);
 
   // Check if user is logged in and fetch history
   useEffect(() => {
@@ -45,9 +47,9 @@ export default function Chat() {
   // API helper functions
   const getAuthHeaders = () => {
     const token = localStorage.getItem('jwtToken'); // Fixed: was 'token', should be 'jwtToken'
-    console.log("🔍 getAuthHeaders - Token from localStorage:", token ? `${token.slice(0, 20)}...` : 'null');
+    //console.log("🔍 getAuthHeaders - Token from localStorage:", token ? `${token.slice(0, 20)}...` : 'null');
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    console.log("🔍 getAuthHeaders - Generated headers:", headers);
+   // console.log("🔍 getAuthHeaders - Generated headers:", headers);
     return headers;
   };
 
@@ -523,6 +525,19 @@ export default function Chat() {
     alert(`Accommodation Booking:\n\n${bookingDetails}`);
   };
 
+  // Handle calendar sync completion
+  const handleCalendarSyncComplete = (result) => {
+    console.log('📅 Calendar sync completed:', result);
+    
+    // Add a success message to the chat
+    const syncMessage = {
+      sender: "ai",
+      text: `🎉 **Calendar Sync Successful!**\n\nI've added ${result.eventsCreated} activities from your itinerary to your Google Calendar. You can now access your travel schedule on all your devices!\n\n[View Calendar](https://calendar.google.com) | Your events are color-coded in green for easy identification.`
+    };
+    
+    setMessages(prev => [...prev, syncMessage]);
+  };
+
   const sendMessage = async () => {
     if (!input.trim()) return;
 
@@ -734,6 +749,15 @@ export default function Chat() {
                         return (
                           <>
                             <TravelSummaryCard response={m.text} travelData={m.travelData} showMapButton={false} />
+                            
+                            {/* Calendar Sync Button - Show for travel responses with itinerary */}
+                            {m.travelData && m.text && m.text.length > 200 && (
+                              <CalendarSyncButton 
+                                itineraryText={m.text}
+                                travelData={m.travelData}
+                                onSyncComplete={handleCalendarSyncComplete}
+                              />
+                            )}
                             
                             {/* Travel Options Display */}
                             {m.showTravelResults && m.travelOptions && (
