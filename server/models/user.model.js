@@ -1,5 +1,11 @@
 import mongoose from "mongoose";
 
+const imageSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  public_id: { type: String, required: true },
+});
+
+
 const userSchema = new mongoose.Schema(
   {
     email: {
@@ -27,27 +33,26 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
-    // Virtual reference to chat histories (not stored in database)
-    // chatHistories will be populated via virtual populate
+    // 👇 Images stored for each user
+    images: [imageSchema],
   },
   {
     timestamps: true,
-    toJSON: { virtuals: true }, // Include virtuals when converting to JSON
+    toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
 // Virtual populate for chat histories
-userSchema.virtual('chatHistories', {
-  ref: 'ChatHistory',
-  localField: '_id',
-  foreignField: 'userId',
-  options: { 
+userSchema.virtual("chatHistories", {
+  ref: "ChatHistory",
+  localField: "_id",
+  foreignField: "userId",
+  options: {
     sort: { lastActivityAt: -1 },
-    limit: 50 // Limit to recent 50 chats
-  }
+    limit: 50,
+  },
 });
 
 const User = mongoose.model("User", userSchema);
-
 export default User;

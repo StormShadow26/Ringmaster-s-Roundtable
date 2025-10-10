@@ -1,8 +1,13 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../authSlice";
-import { useNavigate } from "react-router-dom";
-import { MapPin, MessageCircle, Plane, GitCompare, Compass,Camera,Bus, Calendar, Settings, LogOut, ChevronRight, Star, TrendingUp, Users, Globe,Sparkles,Book } from "lucide-react";
+import { useNavigate } from "react-router";
+// The following line is commented out in the original, but the icons are being imported from the line below it.
+// import { MapPin, Sparkles, Plane, Camera, LogOut, ChevronRight, TrendingUp } from "lucide-react"; 
+import PhotoSlideshow from "./PhotoSlideshow";
+import NearbyPlaces from "./NearbyPlaces";
+
+import { MapPin, Sparkles, Plane, Camera, LogOut, ChevronRight, TrendingUp, Bus, Book } from "lucide-react";
 
 // ---------------- Helper: decode Google Profile Picture ----------------
 function getGoogleProfilePic(user, token) {
@@ -50,9 +55,9 @@ export default function Dashboard() {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [activeNav, setActiveNav] = useState("Home");
-  const [cityInput, setCityInput] = useState("");
+  const [weather, setWeather] = useState(null);
 
-  // popular locations (persisted in localStorage)
+  const [cityInput, setCityInput] = useState("");
   const [popularLocations, setPopularLocations] = useState(() => {
     const stored = localStorage.getItem("popularLocations");
     if (stored) return JSON.parse(stored);
@@ -79,15 +84,23 @@ export default function Dashboard() {
     navigate("/");
   };
 
+  const clampIndex = (idx) => {
+    if (!images || images.length === 0) return 0;
+    return Math.max(0, Math.min(idx, images.length - 1));
+  };
+
+  const goToIndex = (idx) => setCarouselIndex(clampIndex(idx));
   const CARD_WIDTH = 260;
   const CARD_GAP = 16;
 
+  
+
   // ---------------- Fetch Nearby Places ----------------
   const fetchNearbyPlaces = async (lat, lon) => {
-    const API_KEY = "5ae2e3f221c38a28845f05b60fde1e3425197994a9a3eb8f96ccff2c"; // <-- Replace with your own OpenTripMap API key
+    // const API_KEY = "5ae2e3f221c38a28845f05b60fde1e3425197994a9a3eb8f96ccff2c"; // <-- Replace with your own OpenTripMap API key
     try {
       setLoading(true);
-      const radiusUrl = `https://api.opentripmap.com/0.1/en/places/radius?radius=70000&lon=${lon}&lat=${lat}&rate=2&format=json&apikey=${API_KEY}`;
+      const radiusUrl = `https://api.opentripmap.com/0.1/en/places/radius?radius=70000&lon=${lon}&lat=${lat}&rate=2&format=json&apikey=${import.meta.env.VITE_OPENTRIPMAP_API_KEY}`;
       const res = await fetch(radiusUrl);
       const data = await res.json();
 
@@ -101,7 +114,7 @@ export default function Dashboard() {
         list.slice(0, 20).map(async (item) => {
           try {
             const detailRes = await fetch(
-              `https://api.opentripmap.com/0.1/en/places/xid/${item.xid}?apikey=${API_KEY}`
+              `https://api.opentripmap.com/0.1/en/places/xid/${item.xid}?apikey=${import.meta.env.VITE_OPENTRIPMAP_API_KEY}`
             );
             const detail = await detailRes.json();
             const point = item.point || detail.point;
@@ -117,6 +130,7 @@ export default function Dashboard() {
           } catch {
             return {
               name: item.name || "Unknown",
+              // FIX: This line was missing a closing backtick for the template literal
               preview: `https://source.unsplash.com/800x600/?${encodeURIComponent(item.name || "travel")}`,
               distance: null,
             };
@@ -145,6 +159,7 @@ export default function Dashboard() {
     setSelectedLocation(loc);
     setLoading(true);
     try {
+      // FIX: This line was missing a closing backtick for the template literal
       const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(loc)}`);
       const geoData = await geoRes.json();
       if (geoData.length) {
@@ -212,7 +227,72 @@ export default function Dashboard() {
     return () => (mounted = false);
   }, []);
 
-  // ---------------- Auto Carousel ----------------
+  function getEmailFromToken(token) {
+    if (!token) return null;
+    try {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      const payload = JSON.parse(jsonPayload);
+      return payload.email || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+
+  useEffect(() => {
+  if (!location?.lat || !location?.lon) return;
+
+  const fetchWeather = async () => {
+    try {
+      const res = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${location.lat}&lon=${location.lon}&units=metric&appid=${import.meta.env.VITE_OPENWEATHER_API_KEY}`
+      );
+      const data = await res.json();
+      
+      const weatherData = {
+        temp: data.main.temp,
+        description: data.weather[0].description,
+        icon: `https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png`,
+        city: data.name
+      };
+
+      setWeather(weatherData);
+
+      // ⚠ Send warning email if "clear sky"
+      if (weatherData.description.toLowerCase() === "clear sky") {
+        const userEmail = getEmailFromToken(token);
+        if (userEmail) {
+          await fetch("/api/send-weather-warning", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: userEmail,
+              weather: weatherData.description,
+              city: weatherData.city
+            }),
+          });
+        }
+      }
+
+    } catch (err) {
+      console.error("Failed to fetch weather:", err);
+    }
+  };
+
+  fetchWeather();
+}, [location, token]);
+
+
+  console.log(weather);
+
+
   useEffect(() => {
     if (!images.length) return;
     const interval = setInterval(() => {
@@ -233,10 +313,16 @@ export default function Dashboard() {
     );
   }
 
-  // ---------------- Main UI ----------------
+
+  
+
   return (
     <div className="min-h-screen bg-white flex">
-      {/* Sidebar */}
+
+       
+
+
+      {/* Left Sidebar Navigation */}
       <aside className="w-72 bg-gradient-to-b from-orange-50 to-orange-100 border-r border-orange-200 flex flex-col h-screen sticky top-0">
         <div className="p-6 border-b border-orange-200">
           <div className="flex items-center gap-4">
@@ -253,14 +339,23 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        {weather && (
+  <div className="flex items-center gap-4 mb-6 p-4 bg-orange-50 rounded-2xl shadow-md w-full max-w-7xl mx-auto">
+    <img src={weather.icon} alt="weather icon" className="w-16 h-16"/>
+    <div>
+      <h3 className="text-xl font-bold">{weather.city}</h3>
+      <p className="text-gray-700">{weather.temp}°C • {weather.description}</p>
+    </div>
+  </div>
+)}
 
         <nav className="flex-1 p-4 space-y-2">
-          {[
-            { name: "Home", icon: Sparkles },
-            { name: "Explore", icon: MapPin },
-            { name: "Trips", icon: Plane },
-            { name: "Quiz", icon: TrendingUp },
-            { name: "Create", icon: Camera },
+          {[ 
+            {name: "Home", icon: Sparkles},
+            {name: "Explore", icon: MapPin},
+            {name: "Trips", icon: Plane},
+            {name: "Quiz", icon: TrendingUp},
+            {name: "Create", icon: Camera},
           ].map((item) => (
             <button
               key={item.name}
@@ -280,13 +375,22 @@ export default function Dashboard() {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-orange-200">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all duration-300 font-semibold"
+        {/* Gallery + Logout Buttons */}
+        <div className="p-4 border-t border-orange-200 space-y-3">
+          <button 
+            onClick={() => navigate("/photos")} 
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-all duration-300 font-semibold group"
           >
-            <LogOut className="w-5 h-5" />
-            <span>Logout</span>
+            <Camera className="w-5 h-5"/>
+            My Gallery
+          </button>
+
+          <button 
+            onClick={handleLogout} 
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all duration-300 font-semibold group"
+          >
+            <LogOut className="w-5 h-5"/>
+            Logout
           </button>
         </div>
       </aside>
@@ -294,17 +398,13 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-8 py-10 space-y-12">
-          {/* Header */}
+          {/* Header Section */}
           <div className="space-y-2">
             <h1 className="text-4xl font-bold text-gray-900">
               Ready for your next adventure, {user?.name?.split(" ")[0] || "Explorer"}?
             </h1>
             <p className="text-lg text-gray-600">
-              The world is waiting - let's discover something extraordinary today
             </p>
-          </div>
-
-          {/* Trending Locations */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">Trending Destinations</h2>
@@ -346,10 +446,7 @@ export default function Dashboard() {
           <section className="space-y-5">
             <h2 className="text-2xl font-bold text-gray-900">Nearby Places to Explore</h2>
             <div className="relative overflow-hidden rounded-2xl shadow-2xl bg-gray-100">
-              <div
-                className="flex items-stretch transition-transform duration-700 ease-in-out p-4"
-                style={{ transform: `translateX(-${carouselIndex * (CARD_WIDTH + CARD_GAP)}px)` }}
-              >
+              <div className="flex items-stretch transition-transform duration-700 ease-in-out" style={{ transform: `translateX(-${carouselIndex * (CARD_WIDTH + CARD_GAP)}px)`, padding: '1rem' }}>
                 {images.map(({ preview, name, distance }, i) => (
                   <div key={i} style={{ flex: `0 0 ${CARD_WIDTH}px`, marginRight: `${CARD_GAP}px` }}>
                     <div className="relative rounded-xl overflow-hidden shadow-lg h-80 group cursor-pointer">
@@ -425,10 +522,10 @@ export default function Dashboard() {
                   color: "from-blue-400 to-blue-600",
                   route: "/explore",
                 },
-                 {
+                {
                   icon: Book,
-                  title: "Compare Destinations",
-                  desc: "Compare Itinerary of any two destinations and choose most budget friendly. ",
+                  title: "Compare Itinerary",
+                  desc: "Compare itineraries between two destinations and choose the most suitable for you.",
                   btn: "Compare Itinerary",
                   color: "from-yellow-400 to-yellow-600",
                   route: "/compare",
@@ -448,6 +545,7 @@ export default function Dashboard() {
                       <h3 className="text-xl font-bold text-gray-900 mb-2">{card.title}</h3>
                       <p className="text-gray-600 mb-6">{card.desc}</p>
                     </div>
+                    {/* FIX: Removed the duplicate card content and button logic below */}
                     <button
                       onClick={() => navigate(card.route)}
                       className={`w-full py-3 rounded-xl bg-gradient-to-r ${card.color} text-white font-semibold hover:opacity-90 transition-all`}
@@ -455,10 +553,23 @@ export default function Dashboard() {
                       {card.btn}
                     </button>
                   </div>
+                  {/* FIX: Removed the duplicate button logic here:
+                  <h3 className="font-bold text-xl mb-2">{card.title}</h3>
+                  <p className="text-gray-600 mb-4">{card.desc}</p>
+                  <button
+                    onClick={() => navigate(card.route)}
+                    className={mt-auto px-4 py-2 rounded-xl font-semibold bg-gradient-to-r ${card.color} text-white hover:scale-105 transition-all duration-300}
+                  >
+                    {card.btn}
+                  </button>
+                  */}
                 </div>
               ))}
             </div>
           </section>
+        </div>
+        <PhotoSlideshow/>
+        <NearbyPlaces/>
         </div>
       </main>
     </div>

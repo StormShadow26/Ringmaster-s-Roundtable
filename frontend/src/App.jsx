@@ -8,6 +8,11 @@ import Transport from "./components/Transport";
 import Compare from "./components/Compare";
 import { Routes, Route } from "react-router";
 import Chat from "./components/Chat";
+import PhotoGallery from "./components/PhotoGallery";
+
+import Transport from "./components/Transport";
+
+// import Chat from "./components/Chat";
 import QuizPage from "./components/QuizPage";
 
 function App() {
@@ -18,6 +23,8 @@ function App() {
         <Route path="/authmodal" element={<AuthModal />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/chat" element={<Chat/>} />
+        <Route path="/explore" element={<Explore/>}/>
+        <Route path="/photos" element={<PhotoGallery/>}/>
         <Route path="/transport" element={<Transport />} />
         <Route path="/compare" element={<Compare />} />
         <Route path="/explore" element={<Explore />}></Route>
