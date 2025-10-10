@@ -4,7 +4,13 @@ import cors from "cors";
 import database from "./database/database.js";
 import userRoutes from "./routes/user.routes.js";
 import mcpRoutes from "./routes/mcp.routes.js";
+import imageRoutes from "./routes/image.routes.js";
+import placeRoutes from "./routes/place.routes.js";
+
 import chatHistoryRoutes from "./routes/chatHistory.routes.js";
+import multer from "multer";
+import fs from "fs";
+
 
 dotenv.config();
 
@@ -27,6 +33,12 @@ database.connect();
 app.use('/api/v1', userRoutes);
 app.use('/api/v1/mcp', mcpRoutes);
 app.use('/api/v1/chat-history', chatHistoryRoutes);
+
+app.use("/api/users", imageRoutes);
+app.use("/api/places", placeRoutes);
+
+// Base route
+app.get("/", (req, res) => res.send("📸 Image Gallery API Running"));
 
 // Start server
 app.listen(PORT, () => {

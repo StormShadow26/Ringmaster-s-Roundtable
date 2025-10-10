@@ -88,6 +88,9 @@ router.post("/chat", optionalAuth, async (req, res) => {
     // Step 1: Send user input + tool definitions to Gemini
     const geminiResponse = await callGeminiAPI(message, [
       {
+
+      },
+      {
         name: "getWeatherDataByCityName",
         description: "Get weather data for a city between given dates.",
         parameters: {

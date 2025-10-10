@@ -3,6 +3,12 @@ import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../authSlice";
 import { useNavigate } from "react-router";
 import { MapPin, Sparkles, Plane, Camera, LogOut, ChevronRight, TrendingUp } from "lucide-react";
+import PhotoSlideshow from "./PhotoSlideshow";
+import NearbyPlaces from "./NearbyPlaces";
+
+
+
+  
 
 function getGoogleProfilePic(user, token) {
   if (user && user.googleId && token) {
@@ -47,11 +53,9 @@ export default function Dashboard() {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [selectedLocation, setSelectedLocation] = useState(null);
   const [activeNav, setActiveNav] = useState("Home");
+  const [weather, setWeather] = useState(null);
 
-  // allow user to type a city
   const [cityInput, setCityInput] = useState("");
-
-  // popular locations stored in state so we can add new ones
   const [popularLocations, setPopularLocations] = useState(() => {
     const stored = localStorage.getItem("popularLocations");
     if (stored) return JSON.parse(stored);
@@ -78,24 +82,19 @@ export default function Dashboard() {
     navigate("/");
   };
 
-  // helper to clamp carousel index within bounds
   const clampIndex = (idx) => {
     if (!images || images.length === 0) return 0;
     return Math.max(0, Math.min(idx, images.length - 1));
   };
 
   const goToIndex = (idx) => setCarouselIndex(clampIndex(idx));
-
-
-  // fixed carousel card size (px) and gap (px)
   const CARD_WIDTH = 260;
   const CARD_GAP = 16;
-
 
   const fetchNearbyPlaces = async (lat, lon) => {
     try {
       setLoading(true);
-      const radiusUrl = `https://api.opentripmap.com/0.1/en/places/radius?radius=70000&lon=${lon}&lat=${lat}&rate=2&format=json&apikey=5ae2e3f221c38a28845f05b60fde1e3425197994a9a3eb8f96ccff2c`;
+      const radiusUrl = `https://api.opentripmap.com/0.1/en/places/radius?radius=70000&lon=${lon}&lat=${lat}&rate=2&format=json&apikey=${import.meta.env.VITE_OPENTRIPMAP_API_KEY}`;
       const res = await fetch(radiusUrl);
       const data = await res.json();
       const list = Array.isArray(data.features) ? data.features : Array.isArray(data) ? data : [];
@@ -104,7 +103,7 @@ export default function Dashboard() {
         list.slice(0, 20).map(async (item) => {
           try {
             const detailRes = await fetch(
-              `https://api.opentripmap.com/0.1/en/places/xid/${item.xid}?apikey=5ae2e3f221c38a28845f05b60fde1e3425197994a9a3eb8f96ccff2c`
+              `https://api.opentripmap.com/0.1/en/places/xid/${item.xid}?apikey=${import.meta.env.VITE_OPENTRIPMAP_API_KEY}`
             );
             const detail = await detailRes.json();
             const point = item.point || detail.point;
@@ -135,7 +134,6 @@ export default function Dashboard() {
       const geoData = await geoRes.json();
       if (geoData.length) {
         const { lat, lon } = geoData[0];
-        // update popularLocations (keep unique, recent first)
         setPopularLocations((prev) => {
           const normalized = prev.filter((p) => p.toLowerCase() !== loc.toLowerCase());
           const next = [loc, ...normalized].slice(0, 15);
@@ -191,6 +189,72 @@ export default function Dashboard() {
     return () => (mounted = false);
   }, []);
 
+  function getEmailFromToken(token) {
+    if (!token) return null;
+    try {
+      const base64Url = token.split(".")[1];
+      const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      const payload = JSON.parse(jsonPayload);
+      return payload.email || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+
+  useEffect(() => {
+  if (!location?.lat || !location?.lon) return;
+
+  const fetchWeather = async () => {
+    try {
+      const res = await fetch(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${location.lat}&lon=${location.lon}&units=metric&appid=${import.meta.env.VITE_OPENWEATHER_API_KEY}`
+      );
+      const data = await res.json();
+      
+      const weatherData = {
+        temp: data.main.temp,
+        description: data.weather[0].description,
+        icon: `https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png`,
+        city: data.name
+      };
+
+      setWeather(weatherData);
+
+      // ⚠️ Send warning email if "clear sky"
+      if (weatherData.description.toLowerCase() === "clear sky") {
+        const userEmail = getEmailFromToken(token);
+        if (userEmail) {
+          await fetch("/api/send-weather-warning", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: userEmail,
+              weather: weatherData.description,
+              city: weatherData.city
+            }),
+          });
+        }
+      }
+
+    } catch (err) {
+      console.error("Failed to fetch weather:", err);
+    }
+  };
+
+  fetchWeather();
+}, [location, token]);
+
+
+  console.log(weather);
+
+
   useEffect(() => {
     if (!images.length) return;
     const interval = setInterval(() => { setCarouselIndex((prev) => (images.length ? (prev + 1) % images.length : 0)); }, 5000);
@@ -208,8 +272,15 @@ export default function Dashboard() {
     );
   }
 
+
+  
+
   return (
     <div className="min-h-screen bg-white flex">
+
+       
+
+
       {/* Left Sidebar Navigation */}
       <aside className="w-72 bg-gradient-to-b from-orange-50 to-orange-100 border-r border-orange-200 flex flex-col h-screen sticky top-0">
         <div className="p-6 border-b border-orange-200">
@@ -227,14 +298,23 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+        {weather && (
+  <div className="flex items-center gap-4 mb-6 p-4 bg-orange-50 rounded-2xl shadow-md w-full max-w-7xl mx-auto">
+    <img src={weather.icon} alt="weather icon" className="w-16 h-16"/>
+    <div>
+      <h3 className="text-xl font-bold">{weather.city}</h3>
+      <p className="text-gray-700">{weather.temp}°C • {weather.description}</p>
+    </div>
+  </div>
+)}
 
         <nav className="flex-1 p-4 space-y-2">
-          {[
+          {[ 
             {name: "Home", icon: Sparkles},
             {name: "Explore", icon: MapPin},
             {name: "Trips", icon: Plane},
             {name: "Quiz", icon: TrendingUp},
-            {name: "Create", icon: Camera}
+            {name: "Create", icon: Camera},
           ].map((item) => (
             <button
               key={item.name}
@@ -252,13 +332,22 @@ export default function Dashboard() {
           ))}
         </nav>
 
-        <div className="p-4 border-t border-orange-200">
+        {/* Gallery + Logout Buttons */}
+        <div className="p-4 border-t border-orange-200 space-y-3">
+          <button 
+            onClick={() => navigate("/photos")} 
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-500 text-white hover:bg-orange-600 transition-all duration-300 font-semibold group"
+          >
+            <Camera className="w-5 h-5"/>
+            My Gallery
+          </button>
+
           <button 
             onClick={handleLogout} 
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-all duration-300 font-semibold group"
           >
             <LogOut className="w-5 h-5"/>
-            <span>Logout</span>
+            Logout
           </button>
         </div>
       </aside>
@@ -266,7 +355,6 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-8 py-10 space-y-12">
-          
           {/* Header Section */}
           <div className="space-y-2">
             <h1 className="text-4xl font-bold text-gray-900">
@@ -312,7 +400,6 @@ export default function Dashboard() {
           <section className="space-y-5">
             <h2 className="text-2xl font-bold text-gray-900">Nearby Places to Explore</h2>
             <div className="relative overflow-hidden rounded-2xl shadow-2xl bg-gray-100">
-              {/* Outer padding ensures partial cards aren't hidden behind rounded corners */}
               <div className="flex items-stretch transition-transform duration-700 ease-in-out" style={{ transform: `translateX(-${carouselIndex * (CARD_WIDTH + CARD_GAP)}px)`, padding: '1rem' }}>
                 {images.map(({ preview, name, distance }, i) => (
                   <div key={i} style={{ flex: `0 0 ${CARD_WIDTH}px`, marginRight: `${CARD_GAP}px` }}>
@@ -353,17 +440,20 @@ export default function Dashboard() {
             <h2 className="text-2xl font-bold text-gray-900">Get Started</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
-                {icon: Sparkles, title:"Travel Quiz", desc:"Tell us your preferences and we'll craft personalized trips just for you.", btn:"Start Quiz", color:"from-purple-400 to-purple-600"},
-                {icon: Plane, title:"Create Trip", desc:"Build, save and share your custom trip plans with friends and family.", btn:"Create Trip", color:"from-orange-400 to-orange-600"},
-                {icon: Camera, title:"Explore More", desc:"Discover curated guides, hidden gems and authentic local experiences.", btn:"Explore Now", color:"from-blue-400 to-blue-600"}
+                {icon: Sparkles, title:"Travel Quiz", desc:"Tell us your preferences and we'll craft personalized trips just for you.", btn:"Start Quiz", color:"from-purple-400 to-purple-600", route:"/quiz"},
+                {icon: Plane, title:"Create Trip", desc:"Build, save and share your custom trip plans with friends and family.", btn:"Create Trip", color:"from-orange-400 to-orange-600", route:"/chat"},
+                {icon: Camera, title:"Explore More", desc:"Discover curated guides, hidden gems and authentic local experiences.", btn:"Explore Now", color:"from-blue-400 to-blue-600", route:"/explore"}
               ].map((card, idx) => (
                 <div key={idx} className="bg-white border border-gray-200 rounded-2xl p-7 shadow-lg hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 flex flex-col">
                   <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${card.color} flex items-center justify-center mb-4 shadow-lg`}>
                     <card.icon className="w-7 h-7 text-white"/>
                   </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{card.title}</h3>
-                  <p className="text-gray-600 text-sm mb-6 flex-1">{card.desc}</p>
-                  <button className={`w-full bg-gradient-to-r ${card.color} text-white px-6 py-3 rounded-xl font-semibold hover:shadow-lg transition-all duration-300 hover:scale-105`}>
+                  <h3 className="font-bold text-xl mb-2">{card.title}</h3>
+                  <p className="text-gray-600 mb-4">{card.desc}</p>
+                  <button
+                    onClick={() => navigate(card.route)}
+                    className={`mt-auto px-4 py-2 rounded-xl font-semibold bg-gradient-to-r ${card.color} text-white hover:scale-105 transition-all duration-300`}
+                  >
                     {card.btn}
                   </button>
                 </div>
@@ -371,6 +461,8 @@ export default function Dashboard() {
             </div>
           </section>
         </div>
+        <PhotoSlideshow/>
+        <NearbyPlaces/>
       </main>
     </div>
   );
