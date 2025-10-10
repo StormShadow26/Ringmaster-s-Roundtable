@@ -4,6 +4,12 @@ import TravelSummaryCard from "./TravelSummaryCard";
 import ExamplePrompts from "./ExamplePrompts";
 import EventsCard from "./EventsCard";
 import RobustTravelMap from "./RobustTravelMapFixed";
+import TravelOptionsDisplay from "./TravelOptionsDisplay";
+import AccommodationDisplay from "./AccommodationDisplay";
+import CalendarSyncButton from "./CalendarSyncButton";
+import travelBookingService from "../services/travelBookingService";
+import accommodationService from "../services/accommodationService";
+import travelPlanningUtil from "../utils/travelPlanningUtil";
 
 export default function Chat() {
   const [messages, setMessages] = useState([]);
@@ -17,6 +23,15 @@ export default function Chat() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showMapCanvas, setShowMapCanvas] = useState(false);
+  const [showTransportationModal, setShowTransportationModal] = useState(false);
+  const [transportationOptions, setTransportationOptions] = useState(null);
+  const [travelSearchLoading, setTravelSearchLoading] = useState(false);
+  const [travelOptions, setTravelOptions] = useState(null);
+  const [userLocation, setUserLocation] = useState(null);
+  const [showAccommodationModal, setShowAccommodationModal] = useState(false);
+  const [accommodationOptions, setAccommodationOptions] = useState(null);
+  const [accommodationSearchLoading, setAccommodationSearchLoading] = useState(false);
+  const [showCalendarSync, setShowCalendarSync] = useState(false);
 
   // Check if user is logged in and fetch history
   useEffect(() => {
@@ -32,9 +47,9 @@ export default function Chat() {
   // API helper functions
   const getAuthHeaders = () => {
     const token = localStorage.getItem('jwtToken'); // Fixed: was 'token', should be 'jwtToken'
-    console.log("🔍 getAuthHeaders - Token from localStorage:", token ? `${token.slice(0, 20)}...` : 'null');
+    //console.log("🔍 getAuthHeaders - Token from localStorage:", token ? `${token.slice(0, 20)}...` : 'null');
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    console.log("🔍 getAuthHeaders - Generated headers:", headers);
+   // console.log("🔍 getAuthHeaders - Generated headers:", headers);
     return headers;
   };
 
@@ -188,6 +203,339 @@ export default function Chat() {
           : chat
       )
     );
+  };
+
+  // Handle travel planning requests
+  const handleTravelPlanningRequest = async (userMessage, currentMessages, chatIdToUse) => {
+    try {
+      setTravelSearchLoading(true);
+      
+      // Extract travel details from the message
+      const travelDetails = travelPlanningUtil.extractTravelDetails(userMessage);
+      console.log("🧳 Extracted travel details:", travelDetails);
+
+      // Get user's current location if not already available
+      if (!userLocation) {
+        try {
+          const location = await travelBookingService.getCurrentLocation();
+          setUserLocation(location);
+          console.log("📍 User location:", location);
+        } catch (locationError) {
+          console.warn("Could not get user location:", locationError.message);
+          // Continue with fallback location
+        }
+      }
+
+      // Generate initial response
+      const searchResponse = travelPlanningUtil.generateSearchResponse(
+        travelDetails, 
+        userLocation
+      );
+
+      // Add AI response with search message
+      const searchMessages = [
+        ...currentMessages,
+        { 
+          sender: "ai", 
+          text: searchResponse.message,
+          travelSearch: true
+        }
+      ];
+      setMessages(searchMessages);
+
+      // Update chat history
+      if (chatIdToUse) {
+        updateChatMessages(chatIdToUse, searchMessages);
+      }
+
+      // Perform travel search
+      const originCity = travelDetails.origin || userLocation?.city || 'Current Location';
+      const destinationCity = travelDetails.destination;
+      const departureDate = travelDetails.dates[0];
+      const returnDate = travelDetails.dates.length > 1 ? travelDetails.dates[1] : null;
+
+      // Get airport codes for flight search
+      const [originCode, destinationCode] = await Promise.all([
+        travelBookingService.getAirportCode(originCity),
+        travelBookingService.getAirportCode(destinationCity)
+      ]);
+
+      console.log("🛫 Airport codes:", { 
+        origin: originCode, 
+        destination: destinationCode 
+      });
+
+      // Search all transportation options
+      const transportResults = await travelBookingService.searchAllTransportation(
+        originCode || originCity,
+        destinationCode || destinationCity,
+        departureDate,
+        returnDate
+      );
+
+      console.log("🚗 Transport results:", transportResults);
+
+      // Set travel options for display
+      setTravelOptions({
+        ...transportResults,
+        searchDetails: {
+          ...travelDetails,
+          originCity,
+          destinationCity,
+          originCode,
+          destinationCode
+        }
+      });
+
+      // Add results message
+      const totalOptions = (transportResults.flights?.length || 0) + 
+                          (transportResults.trains?.length || 0) + 
+                          (transportResults.buses?.length || 0);
+
+      const resultsMessage = `🎉 Great! I found ${totalOptions} travel options for your trip!\n\n` +
+        `✈️ **${transportResults.flights?.length || 0} Flights** - Starting from $${transportResults.flights?.[0]?.price || 'N/A'}\n` +
+        `🚆 **${transportResults.trains?.length || 0} Trains** - Starting from $${transportResults.trains?.[0]?.price || 'N/A'}\n` +
+        `🚌 **${transportResults.buses?.length || 0} Buses** - Starting from $${transportResults.buses?.[0]?.price || 'N/A'}\n\n` +
+        `You can compare prices, schedules, and book directly through the options below. ` +
+        `All prices are shown per person and include current availability.`;
+
+      const finalMessages = [
+        ...searchMessages,
+        { 
+          sender: "ai", 
+          text: resultsMessage,
+          travelOptions: transportResults,
+          showTravelResults: true
+        }
+      ];
+
+      setMessages(finalMessages);
+
+      // Update chat history
+      if (chatIdToUse) {
+        updateChatMessages(chatIdToUse, finalMessages);
+      }
+
+    } catch (error) {
+      console.error("🚨 Travel search error:", error);
+      
+      const errorMessage = "I'm sorry, I encountered an issue while searching for travel options. " +
+                          "Please try again or provide more specific details about your destination and dates.";
+      
+      const errorMessages = [
+        ...currentMessages,
+        { sender: "ai", text: errorMessage, error: true }
+      ];
+      
+      setMessages(errorMessages);
+      
+      if (chatIdToUse) {
+        updateChatMessages(chatIdToUse, errorMessages);
+      }
+    } finally {
+      setTravelSearchLoading(false);
+      setIsLoading(false);
+    }
+  };
+
+  // Handle booking click (for chat-based travel options)
+  const handleBookingClick = (travelOption) => {
+    console.log("🎫 Booking clicked:", travelOption);
+    
+    // In a real implementation, this would redirect to the booking provider
+    // For now, we'll show a mock booking interface or redirect to a booking URL
+    const bookingMessage = `🎫 **Booking Details**\n\n` +
+      `**${travelOption.airlineName || travelOption.operatorName}** ${travelOption.flightNumber || travelOption.trainNumber || travelOption.busNumber}\n` +
+      `📅 ${new Date(travelOption.departure.time).toLocaleDateString()}\n` +
+      `⏰ ${new Date(travelOption.departure.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n` +
+      `💰 $${travelOption.price} ${travelOption.currency}\n\n` +
+      `To complete your booking, you would typically be redirected to the provider's website. ` +
+      `This is a demo - in a real application, this would integrate with actual booking APIs.`;
+
+    const bookingMessages = [
+      ...messages,
+      { 
+        sender: "ai", 
+        text: bookingMessage,
+        bookingInfo: travelOption
+      }
+    ];
+
+    setMessages(bookingMessages);
+
+    // Update chat history
+    if (currentChatId) {
+      updateChatMessages(currentChatId, bookingMessages);
+    }
+  };
+
+  // Handle booking click from transportation modal (doesn't add to chat)
+  const handleTransportationBookingClick = (travelOption) => {
+    console.log("🎫 Transportation booking clicked:", travelOption);
+    
+    // Show a browser alert or redirect to booking URL
+    const bookingDetails = `${travelOption.airlineName || travelOption.operatorName} - ${travelOption.flightNumber || travelOption.trainNumber || travelOption.busNumber}\n` +
+      `${new Date(travelOption.departure.time).toLocaleDateString()} at ${new Date(travelOption.departure.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n` +
+      `Price: $${travelOption.price} ${travelOption.currency}\n\n` +
+      `This would redirect to the booking website in a real application.`;
+    
+    alert(`Booking Details:\n\n${bookingDetails}`);
+    
+    // In a real app, you might:
+    // window.open(travelOption.bookingUrl, '_blank');
+    // Or redirect to your own booking flow
+  };
+
+  // Handle transportation search for current travel data
+  const handleTransportationSearch = async () => {
+    if (!currentTravelData?.destination) {
+      console.error('No current travel data available');
+      return;
+    }
+
+    try {
+      setTravelSearchLoading(true);
+      setTransportationOptions(null);
+
+      console.log('🚀 Searching transportation options for:', currentTravelData.destination);
+      console.log('🔍 Current travel data:', currentTravelData);
+
+      // Get user location first
+      let userLocation;
+      try {
+        userLocation = await travelBookingService.getCurrentLocation();
+        console.log('📍 User location detected:', userLocation);
+      } catch (error) {
+        console.log('⚠️ Could not get user location, using default origin');
+        userLocation = { city: 'New York', airport: 'JFK' }; // Default origin
+      }
+
+      const origin = userLocation.city || userLocation.airport || 'New York';
+      const destination = currentTravelData.destination?.city || currentTravelData.city || currentTravelData.destination;
+      const departureDate = currentTravelData.startDate || new Date();
+      const returnDate = currentTravelData.endDate || null;
+
+      console.log('🔍 Search parameters:', { origin, destination, departureDate, returnDate });
+
+      // Use the existing travel booking service with correct parameters: (origin, destination, departureDate, returnDate)
+      const searchResults = await travelBookingService.searchAllTransportation(
+        origin,
+        destination,
+        departureDate,
+        returnDate
+      );
+
+      console.log('✅ Transportation search completed:', searchResults);
+      console.log('📊 Data structure for TravelOptionsDisplay:', {
+        flights: searchResults.flights?.length,
+        trains: searchResults.trains?.length,
+        buses: searchResults.buses?.length,
+        sampleFlight: searchResults.flights?.[0],
+        sampleTrain: searchResults.trains?.[0],
+        sampleBus: searchResults.buses?.[0]
+      });
+
+      // Add a simple success message to chat
+      const totalOptions = (searchResults.flights?.length || 0) + (searchResults.trains?.length || 0) + (searchResults.buses?.length || 0);
+      const transportSuccessMessage = {
+        sender: "ai",
+        text: `✅ **Transportation Options Found**\n\nI found ${totalOptions} transportation options for your journey! Please check the transportation facilities using the 'Find Transport' button for detailed flight, train, and bus options with prices and booking information.`
+      };
+      setMessages(prev => [...prev, transportSuccessMessage]);
+
+      setTransportationOptions(searchResults);
+      setShowTransportationModal(true);
+
+    } catch (error) {
+      console.error('❌ Transportation search failed:', error);
+      // You could add an error message to the chat or show a toast notification
+      const errorMessage = {
+        sender: "ai",
+        text: "Sorry, I encountered an error while searching for transportation options. Please try again later."
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setTravelSearchLoading(false);
+    }
+  };
+
+  // Handle accommodation search for current travel data
+  const handleAccommodationSearch = async () => {
+    if (!currentTravelData?.destination) {
+      console.error('No current travel data available for accommodation search');
+      return;
+    }
+
+    try {
+      setAccommodationSearchLoading(true);
+      setAccommodationOptions(null);
+
+      console.log('🏨 Searching accommodation options for:', currentTravelData.destination);
+
+      // Calculate check-in and check-out dates
+      const checkInDate = currentTravelData.startDate || new Date();
+      const checkOutDate = currentTravelData.endDate || new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // Default to 3 days later
+      const guests = currentTravelData.passengers || 2;
+
+      // Use the accommodation service
+      const searchResults = await accommodationService.searchAccommodations(
+        currentTravelData.destination?.city || currentTravelData.city || currentTravelData.destination,
+        checkInDate,
+        checkOutDate,
+        guests
+      );
+
+      console.log('✅ Accommodation search completed:', searchResults);
+
+      // Add a success message to chat
+      const totalAccommodations = (searchResults.hotels?.length || 0) + (searchResults.hostels?.length || 0) + (searchResults.apartments?.length || 0);
+      const accommodationSuccessMessage = {
+        sender: "ai",
+        text: `🏨 **Accommodation Options Found**\n\nI found ${totalAccommodations} accommodation options in ${currentTravelData.destination?.city || currentTravelData.city}! Check out hotels, hostels, and apartments with detailed information and booking options using the 'Accommodations' button.`
+      };
+      setMessages(prev => [...prev, accommodationSuccessMessage]);
+
+      setAccommodationOptions(searchResults);
+      setShowAccommodationModal(true);
+
+    } catch (error) {
+      console.error('❌ Accommodation search failed:', error);
+      const errorMessage = {
+        sender: "ai",
+        text: "Sorry, I encountered an error while searching for accommodations. Please try again later."
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setAccommodationSearchLoading(false);
+    }
+  };
+
+  // Handle accommodation booking click (doesn't add to chat)
+  const handleAccommodationBookingClick = (accommodation) => {
+    console.log("🏨 Accommodation booking clicked:", accommodation);
+    
+    const bookingDetails = `${accommodation.name}\n` +
+      `${accommodation.address}\n` +
+      `Check-in: ${new Date(accommodation.checkIn).toLocaleDateString()}\n` +
+      `Check-out: ${new Date(accommodation.checkOut).toLocaleDateString()}\n` +
+      `Price: $${accommodation.price.perNight}/night (Total: $${accommodation.price.total})\n` +
+      `Rating: ${accommodation.rating}⭐ (${accommodation.reviewCount} reviews)\n\n` +
+      `This would redirect to the booking website in a real application.`;
+    
+    alert(`Accommodation Booking:\n\n${bookingDetails}`);
+  };
+
+  // Handle calendar sync completion
+  const handleCalendarSyncComplete = (result) => {
+    console.log('📅 Calendar sync completed:', result);
+    
+    // Add a success message to the chat
+    const syncMessage = {
+      sender: "ai",
+      text: `🎉 **Calendar Sync Successful!**\n\nI've added ${result.eventsCreated} activities from your itinerary to your Google Calendar. You can now access your travel schedule on all your devices!\n\n[View Calendar](https://calendar.google.com) | Your events are color-coded in green for easy identification.`
+    };
+    
+    setMessages(prev => [...prev, syncMessage]);
   };
 
   const sendMessage = async () => {
@@ -401,6 +749,27 @@ export default function Chat() {
                         return (
                           <>
                             <TravelSummaryCard response={m.text} travelData={m.travelData} showMapButton={false} />
+                            
+                            {/* Calendar Sync Button - Show for travel responses with itinerary */}
+                            {m.travelData && m.text && m.text.length > 200 && (
+                              <CalendarSyncButton 
+                                itineraryText={m.text}
+                                travelData={m.travelData}
+                                onSyncComplete={handleCalendarSyncComplete}
+                              />
+                            )}
+                            
+                            {/* Travel Options Display */}
+                            {m.showTravelResults && m.travelOptions && (
+                              <TravelOptionsDisplay 
+                                travelData={m.travelOptions}
+                                loading={false}
+                                origin={m.travelOptions.searchDetails?.originCity || 'Your Location'}
+                                destination={m.travelOptions.searchDetails?.destinationCity || 'Destination'}
+                                onBookingClick={handleBookingClick}
+                              />
+                            )}
+                            
                             {m.travelData && m.travelData.events && Array.isArray(m.travelData.events.upcoming) && m.travelData.events.upcoming.length > 0 && (
                               <EventsCard 
                                 events={m.travelData.events.upcoming} 
@@ -429,7 +798,7 @@ export default function Chat() {
           ))}
           
             {/* Loading Indicator */}
-            {isLoading && (
+            {(isLoading || travelSearchLoading) && (
               <div className="flex justify-start">
                 <div className="max-w-[85%]">
                   <div className="bg-white rounded-2xl px-6 py-4 shadow-xl border border-orange-200 backdrop-blur-sm">
@@ -439,10 +808,25 @@ export default function Chat() {
                         <div className="w-3 h-3 bg-orange-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
                         <div className="w-3 h-3 bg-orange-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                       </div>
-                      <span className="text-gray-700 font-medium">Planning your perfect trip...</span>
+                      <span className="text-gray-700 font-medium">
+                        {travelSearchLoading ? '🧳 Searching flights, trains & buses...' : 'Planning your perfect trip...'}
+                      </span>
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+            
+            {/* Standalone Travel Options Display */}
+            {travelOptions && !messages.some(m => m.showTravelResults) && (
+              <div className="mt-6">
+                <TravelOptionsDisplay 
+                  travelData={travelOptions}
+                  loading={travelSearchLoading}
+                  origin={travelOptions.searchDetails?.originCity || 'Your Location'}
+                  destination={travelOptions.searchDetails?.destinationCity || 'Destination'}
+                  onBookingClick={handleBookingClick}
+                />
               </div>
             )}
         </div>
@@ -477,20 +861,61 @@ export default function Chat() {
                 )}
               </button>
               
-              {/* View Map Button in Chat Area (when travel data is available) */}
+              {/* Action Buttons for Travel Data */}
               {currentTravelData && (
-                <button
-                  onClick={() => {
-                    console.log('Opening map canvas...');
-                    setShowMapCanvas(true);
-                  }}
-                  className="ml-3 px-6 py-4 rounded-2xl font-bold bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 flex items-center space-x-2"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c-.317-.159-.69-.159-1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
-                  </svg>
-                  <span>View Map</span>
-                </button>
+                <div className="flex space-x-3 ml-3">
+                  {/* View Map Button */}
+                  <button
+                    onClick={() => {
+                      console.log('Opening map canvas...');
+                      setShowMapCanvas(true);
+                    }}
+                    className="px-6 py-4 rounded-2xl font-bold bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 flex items-center space-x-2"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c-.317-.159-.69-.159-1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
+                    </svg>
+                    <span>View Map</span>
+                  </button>
+
+                  {/* Transportation Options Button */}
+                  <button
+                    onClick={() => {
+                      console.log('Opening transportation options...');
+                      handleTransportationSearch();
+                    }}
+                    className="px-6 py-4 rounded-2xl font-bold bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 flex items-center space-x-2"
+                    disabled={travelSearchLoading}
+                  >
+                    {travelSearchLoading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                      </svg>
+                    )}
+                    <span>{travelSearchLoading ? 'Searching...' : 'Find Transport'}</span>
+                  </button>
+
+                  {/* Accommodations Button */}
+                  <button
+                    onClick={() => {
+                      console.log('Opening accommodation options...');
+                      handleAccommodationSearch();
+                    }}
+                    className="px-6 py-4 rounded-2xl font-bold bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 hover:scale-105 flex items-center space-x-2"
+                    disabled={accommodationSearchLoading}
+                  >
+                    {accommodationSearchLoading ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.905l3 1m-3-1.5v2.25A2.25 2.25 0 0015 13.5h-1.875a1.125 1.125 0 01-1.125-1.125V9.75c0-.621.504-1.125 1.125-1.125h1.875A2.25 2.25 0 0117.25 10.5V12" />
+                      </svg>
+                    )}
+                    <span>{accommodationSearchLoading ? 'Searching...' : 'Accommodations'}</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -600,6 +1025,99 @@ export default function Chat() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Transportation Options Modal */}
+        {showTransportationModal && transportationOptions && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="relative bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-white">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Transportation Options</h2>
+                      <p className="text-green-100/90 font-medium">
+                        Travel to {currentTravelData.destination?.city || currentTravelData.city}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowTransportationModal(false)}
+                    className="group w-10 h-10 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all duration-200"
+                    title="Close transportation options"
+                  >
+                    <svg className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 bg-gradient-to-br from-slate-50 to-slate-100/50 overflow-auto max-h-[80vh]">
+                <div className="p-6">
+                  <TravelOptionsDisplay
+                    travelData={transportationOptions}
+                    onBookingClick={handleTransportationBookingClick}
+                    loading={false}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Accommodation Options Modal */}
+        {showAccommodationModal && accommodationOptions && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden">
+              {/* Modal Header */}
+              <div className="relative bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-white">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 21v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21m0 0h4.5V3.545M12.75 21h7.5V10.75M2.25 21h1.5m18 0h-18M2.25 9l4.5-1.636M18.75 3l-1.5.545m0 6.905l3 1m-3-1.5v2.25A2.25 2.25 0 0015 13.5h-1.875a1.125 1.125 0 01-1.125-1.125V9.75c0-.621.504-1.125 1.125-1.125h1.875A2.25 2.25 0 0117.25 10.5V12" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Accommodation Options</h2>
+                      <p className="text-purple-100/90 font-medium">
+                        Stay in {currentTravelData.destination?.city || currentTravelData.city}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowAccommodationModal(false)}
+                    className="group w-10 h-10 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all duration-200"
+                    title="Close accommodation options"
+                  >
+                    <svg className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 bg-gradient-to-br from-slate-50 to-slate-100/50 overflow-auto max-h-[80vh]">
+                <div className="p-6">
+                  <AccommodationDisplay
+                    accommodationData={accommodationOptions}
+                    onBookingClick={handleAccommodationBookingClick}
+                    loading={false}
+                    destination={currentTravelData.destination?.city || currentTravelData.city}
+                  />
+                </div>
               </div>
             </div>
           </div>

@@ -9,6 +9,11 @@ import { Routes, Route } from "react-router";
 import Chat from "./components/Chat";
 import PhotoGallery from "./components/PhotoGallery";
 
+import Transport from "./components/Transport";
+
+// import Chat from "./components/Chat";
+import QuizPage from "./components/QuizPage";
+
 function App() {
   return (
     <ErrorBoundary>
@@ -19,6 +24,9 @@ function App() {
         <Route path="/chat" element={<Chat/>} />
         <Route path="/explore" element={<Explore/>}/>
         <Route path="/photos" element={<PhotoGallery/>}/>
+        <Route path="/transport" element={<Transport />} />
+        <Route path="/explore" element={<Explore />}></Route>
+        <Route path="/quiz" element={<QuizPage/>}></Route>
       </Routes>
     </ErrorBoundary>
   );
