@@ -4,7 +4,7 @@ import AuthModal from "./components/AuthModal";
 import Dashboard from "./components/Dashboard";
 import ErrorBoundary from "./components/ErrorBoundary";
 import Explore from "./components/Explore";
-import Transport from "./components/Transport";
+// import Transport from "./components/Transport";
 import Compare from "./components/Compare";
 import { Routes, Route } from "react-router";
 import Chat from "./components/Chat";
