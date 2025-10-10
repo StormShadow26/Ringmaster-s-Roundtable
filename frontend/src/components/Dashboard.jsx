@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { logout } from "../authSlice";
-import { useNavigate } from "react-router";
-import { MapPin, Sparkles, Plane, Camera, LogOut, ChevronRight, TrendingUp, Bus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { MapPin, MessageCircle, Plane, GitCompare, Compass,Camera,Bus, Calendar, Settings, LogOut, ChevronRight, Star, TrendingUp, Users, Globe,Sparkles,Book } from "lucide-react";
 
 // ---------------- Helper: decode Google Profile Picture ----------------
 function getGoogleProfilePic(user, token) {
@@ -424,6 +424,14 @@ export default function Dashboard() {
                   btn: "Explore Now",
                   color: "from-blue-400 to-blue-600",
                   route: "/explore",
+                },
+                 {
+                  icon: Book,
+                  title: "Compare Destinations",
+                  desc: "Compare Itinerary of any two destinations and choose most budget friendly. ",
+                  btn: "Compare Itinerary",
+                  color: "from-yellow-400 to-yellow-600",
+                  route: "/compare",
                 },
               ].map((card, idx) => (
                 <div

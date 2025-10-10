@@ -91,4 +91,4 @@ export async function initMcpServer() {
   console.log("   📚 Data: Curated events & city attractions database");
 }
 
-initMcpServer();
+//initMcpServer();

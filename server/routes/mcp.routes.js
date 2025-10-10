@@ -102,8 +102,12 @@ router.post("/chat", optionalAuth, async (req, res) => {
               type: "string",
               description: "End date (YYYY-MM-DD)",
             },
+            lang:{
+              type:"string",
+              description:"language user has decided to communicate"
+            }
           },
-          required: ["city", "startDate", "endDate"],
+          required: ["city", "startDate", "endDate","lang"],
         },
       },
       {
@@ -121,6 +125,10 @@ router.post("/chat", optionalAuth, async (req, res) => {
               type: "string",
               description: "Trip end date (YYYY-MM-DD)",
             },
+            lang: {
+              type: "string",
+              description: "Language user has decided to communicate"
+            }
           },
           required: ["city", "startDate", "endDate"],
         },
@@ -129,8 +137,8 @@ router.post("/chat", optionalAuth, async (req, res) => {
 
     // Step 2: Handle tool calls
     if (geminiResponse.tool_call?.name === "getWeatherDataByCityName") {
-      const { city, startDate, endDate } = geminiResponse.tool_call.arguments;
-      console.log("🛠 Weather tool called with:", { city, startDate, endDate });
+      const { city, startDate, endDate, lang } = geminiResponse.tool_call.arguments;
+      console.log("🛠 Weather tool called with:", { city, startDate, endDate, lang });
 
       const toolResponse = await mcpServer.invokeTool(
         "getWeatherDataByCityName",
@@ -141,7 +149,7 @@ router.post("/chat", optionalAuth, async (req, res) => {
 
       // Step 3: Send tool output back to Gemini for a polished reply
       const finalResponse = await callGeminiAPI(
-        `User asked about weather in ${city} from ${startDate} to ${endDate}. Tool output: ${weatherText}`
+        `User asked about weather in ${city} from ${startDate} to ${endDate}. Tool output: ${weatherText}. Please respond in ${lang || 'English'} language.`
       );
 
       // Save to database if user is authenticated
@@ -157,8 +165,8 @@ router.post("/chat", optionalAuth, async (req, res) => {
     }
 
     if (geminiResponse.tool_call?.name === "planTripBasedOnWeather") {
-      const { city, startDate, endDate } = geminiResponse.tool_call.arguments;
-      console.log("🛠 Travel planning tool called with:", { city, startDate, endDate });
+      const { city, startDate, endDate, lang } = geminiResponse.tool_call.arguments;
+      console.log("🛠 Travel planning tool called with:", { city, startDate, endDate, lang });
 
       const toolResponse = await mcpServer.invokeTool(
         "planTripBasedOnWeather",
@@ -177,8 +185,9 @@ router.post("/chat", optionalAuth, async (req, res) => {
 
       // Step 3: Send tool output back to Gemini for a polished travel plan
       const finalResponse = await callGeminiAPI(
-        `User asked to plan a trip to ${city} from ${startDate} to ${endDate}. Here's the weather-based travel plan: ${travelPlanText}. Please format this into a nice, readable trip itinerary for the user.`
+        `User asked to plan a trip to ${city} from ${startDate} to ${endDate}. Here's the weather-based travel plan: ${travelPlanText}. Please format this into a nice, readable trip itinerary for the user. Make sure the language you use is ${lang || 'English'}.`
       );
+      // console.log(finalResponse);
 
       // Save to database if user is authenticated
       console.log("🔍 Checking if user is authenticated for travel response:", !!req.user);
