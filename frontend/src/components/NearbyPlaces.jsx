@@ -16,17 +16,17 @@ function getDistanceKm(lat1, lon1, lat2, lon2) {
   return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// --- Helper to convert Google Drive link to direct image link (Re-added for safety) ---
-function getDirectImageUrl(url) {
-  if (!url) return "";
-  if (url.includes("drive.google.com")) {
-    const match = url.match(/\/d\/(.*?)\//);
-    if (match && match[1]) {
-      return `https://drive.google.com/uc?export=view&id=${match[1]}`;
-    }
-  }
-  return url;
-}
+  // // --- Helper to convert Google Drive link to direct image link (Re-added for safety) ---
+  // function getDirectImageUrl(url) {
+  //   if (!url) return "";
+  //   if (url.includes("drive.google.com")) {
+  //     const match = url.match(/\/d\/(.*?)\//);
+  //     if (match && match[1]) {
+  //       return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+  //     }
+  //   }
+  //   return url;
+  // }
 
 export default function NearbyPlaces() {
   const [userLocation, setUserLocation] = useState(null);
@@ -37,13 +37,19 @@ export default function NearbyPlaces() {
   // --- Get user's current location ---
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
+      (pos) => {
         setUserLocation({
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
-        }),
-      (err) => console.error("Location error:", err),
-      { enableHighAccuracy: true }
+        });
+      },
+      (err) => {
+        console.error("Location error:", err);
+        // Fallback to a default location (you can change this to your city)
+        const fallbackLocation = { lat: 28.6139, lon: 77.2090 }; // Delhi, India
+        setUserLocation(fallbackLocation);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 600000 }
     );
   }, []);
 
@@ -52,7 +58,20 @@ export default function NearbyPlaces() {
     const fetchPlaces = async () => {
       try {
         const res = await axios.get(`${API_BASE}/all`);
-        setPlaces(res.data);
+        
+        // Handle different response structures
+        let placesData = [];
+        if (Array.isArray(res.data)) {
+          placesData = res.data;
+        } else if (res.data && Array.isArray(res.data.places)) {
+          placesData = res.data.places;
+        } else if (res.data && res.data.data && Array.isArray(res.data.data)) {
+          placesData = res.data.data;
+        } else {
+          placesData = [];
+        }
+        
+        setPlaces(placesData);
       } catch (err) {
         console.error("Failed to fetch places:", err);
       }
@@ -67,8 +86,7 @@ export default function NearbyPlaces() {
     const filtered = places
       .map((p) => ({
         ...p,
-        // ✅ Apply the conversion here for dynamic image loading
-        photo: getDirectImageUrl(p.photo), 
+        photo: p.photo, 
         distance: getDistanceKm(
           userLocation.lat,
           userLocation.lon,
@@ -76,7 +94,7 @@ export default function NearbyPlaces() {
           p.lon
         ),
       }))
-      .filter((p) => p.distance <= 5)
+      .filter((p) => p.distance <= 5) // Reset back to 5km
       .sort((a, b) => a.distance - b.distance);
 
     setNearby(filtered);

@@ -4,6 +4,19 @@ const Leaderboard = ({ finalScore, leaderboardData }) => {
     const [countdown, setCountdown] = useState(30); // 30 second countdown
     const [showResults, setShowResults] = useState(false);
 
+    const token = localStorage.getItem("jwtToken"); // Replace "token" with your key
+let myUserId = null;
+
+if (token) {
+  try {
+    const payloadBase64 = token.split(".")[1]; // JWT payload
+    const decodedPayload = JSON.parse(atob(payloadBase64));
+    myUserId = decodedPayload.userId || decodedPayload.id; // Adjust based on your token's payload
+  } catch (err) {
+    console.error("Error decoding JWT token:", err);
+  }
+}
+
     useEffect(() => {
         const timer = setInterval(() => {
             setCountdown(prev => {
@@ -19,7 +32,7 @@ const Leaderboard = ({ finalScore, leaderboardData }) => {
     }, []);
 
     const MyRank = () => {
-        const myUserId = "68dcc35823b9650c78a9fbff"; 
+        // const myUserId = "68dcc35823b9650c78a9fbff"; 
         const myRankIndex = leaderboardData.findIndex(entry => entry.userId._id === myUserId);
 
         if (myRankIndex === -1) {

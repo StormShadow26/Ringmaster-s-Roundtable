@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, CheckCircle, Loader2, ExternalLink, Clock, MapPin, Users } from 'lucide-react';
+import GoogleCalendarService from '../services/googleCalendarService';
 
 const CalendarSyncModal = ({ isOpen, onClose, itineraryText, travelData, onComplete }) => {
   const [syncStage, setSyncStage] = useState('idle'); // idle, authenticating, parsing, creating, success, error
@@ -39,51 +40,121 @@ const CalendarSyncModal = ({ isOpen, onClose, itineraryText, travelData, onCompl
 
   const startSync = async () => {
     try {
-      // Step 1: Authentication
+      console.log('🔄 Starting real Google Calendar sync...', {
+        hasItineraryText: !!itineraryText,
+        hasTravelData: !!travelData,
+        itineraryLength: itineraryText?.length,
+        travelData: travelData
+      });
+
+      // Step 1: Initialize Google Calendar Service
       setSyncStage('authenticating');
-      setCurrentStep('Connecting to Google Calendar...');
+      setCurrentStep('Initializing Google Calendar API...');
       setProgress(10);
       
-      await simulateProgress(10, 30, 2000);
+      const initialized = await GoogleCalendarService.initialize();
+      if (!initialized) {
+        throw new Error('Failed to initialize Google Calendar API. Please check your internet connection.');
+      }
+      
+      setCurrentStep('Requesting Google Calendar permissions...');
+      setProgress(20);
+      
+      // This will show the Google OAuth consent screen
+      console.log('🔐 Attempting Google Calendar sign in...');
+      
+      if (!GoogleCalendarService.clientId) {
+        throw new Error('Google Client ID is not configured. Please check your environment variables.');
+      }
+      
+      await GoogleCalendarService.signIn();
+      console.log('✅ Google Calendar sign in successful!');
+      
+      setCurrentStep('Google Calendar access granted!');
+      setProgress(40);
 
-      // Step 2: Parsing
+      // Step 2: Parsing itinerary
       setSyncStage('parsing');
       setCurrentStep('Analyzing your travel itinerary...');
+      setProgress(50);
       
-      await simulateProgress(30, 50, 1500);
+      // Use real parsing from GoogleCalendarService
+      const activities = GoogleCalendarService.parseItineraryActivities(itineraryText, travelData);
+      
+      if (activities.length === 0) {
+        throw new Error('No activities found in your itinerary. Please make sure your itinerary contains day-by-day activities.');
+      }
+      
+      setTotalEvents(activities.length);
+      setCurrentStep(`Found ${activities.length} activities to sync`);
+      setProgress(60);
 
-      // Step 3: Creating events
+      // Step 3: Creating events with real Google Calendar API
       setSyncStage('creating');
       setCurrentStep('Creating calendar events...');
       
-      // Simulate creating multiple events
-      const mockTotalEvents = 8 + Math.floor(Math.random() * 6); // 8-13 events
-      setTotalEvents(mockTotalEvents);
+      let createdCount = 0;
+      const createdEvents = [];
       
-      for (let i = 0; i < mockTotalEvents; i++) {
-        await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
-        setEventsCreated(i + 1);
-        setProgress(50 + ((i + 1) / mockTotalEvents) * 40);
-        setCurrentStep(`Creating event ${i + 1} of ${mockTotalEvents}...`);
+      for (let i = 0; i < activities.length; i++) {
+        const activity = activities[i];
+        setCurrentStep(`Creating "${activity.title.substring(0, 30)}${activity.title.length > 30 ? '...' : ''}"...`);
+        
+        try {
+          const destination = travelData?.destination?.city || travelData?.city || travelData?.destination || 'Travel Destination';
+          
+          const calendarEvent = await GoogleCalendarService.createCalendarEvent({
+            summary: `${activity.title}`,
+            description: `${activity.description}\n\nPart of your ${destination} travel itinerary (Day ${activity.day})`,
+            location: destination,
+            start: {
+              dateTime: activity.startTime.toISOString(),
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            end: {
+              dateTime: activity.endTime.toISOString(),
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+            },
+            colorId: '10' // Green color for travel events
+          });
+          
+          if (calendarEvent) {
+            createdEvents.push(calendarEvent);
+            createdCount++;
+          }
+          
+        } catch (eventError) {
+          console.error(`Failed to create event for activity: ${activity.title}`, eventError);
+          // Continue with other events even if one fails
+        }
+        
+        setEventsCreated(createdCount);
+        setProgress(60 + ((i + 1) / activities.length) * 35);
+      }
+
+      if (createdCount === 0) {
+        throw new Error('Failed to create any calendar events. Please check your Google Calendar permissions.');
       }
 
       // Step 4: Success
       setProgress(100);
       setSyncStage('success');
-      setCurrentStep('All events synced successfully!');
+      setCurrentStep(`Successfully synced ${createdCount} events to Google Calendar!`);
       
       // Trigger confetti animation
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 3000);
 
-      // Mock result data
+      // Real result data
       const result = {
         success: true,
-        eventsCreated: mockTotalEvents,
+        eventsCreated: createdCount,
+        totalActivities: activities.length,
         calendarName: 'Primary Calendar',
-        destination: travelData?.destination?.city || travelData?.city || 'Your Destination',
-        startDate: travelData?.startDate || new Date().toLocaleDateString(),
-        endDate: travelData?.endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()
+        destination: travelData?.destination?.city || travelData?.city || travelData?.destination || 'Your Destination',
+        startDate: travelData?.tripDuration?.startDate || activities[0]?.startTime?.toLocaleDateString() || new Date().toLocaleDateString(),
+        endDate: travelData?.tripDuration?.endDate || activities[activities.length - 1]?.startTime?.toLocaleDateString() || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+        events: createdEvents
       };
       
       setSyncResult(result);
@@ -94,9 +165,25 @@ const CalendarSyncModal = ({ isOpen, onClose, itineraryText, travelData, onCompl
       }
 
     } catch (error) {
-      console.error('Calendar sync error:', error);
+      console.error('❌ Real Calendar sync error:', error);
       setSyncStage('error');
-      setError(error.message || 'Failed to sync with calendar');
+      
+      let userFriendlyMessage = error.message;
+      
+      // Handle specific Google API errors
+      if (error.message.includes('access_denied')) {
+        userFriendlyMessage = 'Calendar access was denied. Please try again and grant permission to access your Google Calendar.';
+      } else if (error.message.includes('popup_blocked')) {
+        userFriendlyMessage = 'Pop-up was blocked. Please allow pop-ups for this site and try again.';
+      } else if (error.message.includes('not configured') || error.message.includes('Client ID')) {
+        userFriendlyMessage = 'Google Calendar integration is not properly configured. Please contact support.';
+      } else if (error.message.includes('Failed to initialize')) {
+        userFriendlyMessage = 'Could not connect to Google services. Please check your internet connection and try again.';
+      } else if (error.message.includes('This app needs to be configured')) {
+        userFriendlyMessage = 'The Google Calendar integration needs to be set up in Google Cloud Console. Please contact the developer.';
+      }
+      
+      setError(userFriendlyMessage);
     }
   };
 
@@ -341,7 +428,13 @@ const CalendarSyncModal = ({ isOpen, onClose, itineraryText, travelData, onCompl
               
               <div className="flex space-x-3">
                 <button
-                  onClick={startSync}
+                  onClick={() => {
+                    // Reset state and try again
+                    setSyncStage('idle');
+                    setProgress(0);
+                    setError(null);
+                    setTimeout(startSync, 100);
+                  }}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-bold py-3 px-4 rounded-xl transition-all duration-300"
                 >
                   Try Again

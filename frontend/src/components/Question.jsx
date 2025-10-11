@@ -7,6 +7,8 @@ const Question = ({ question, onAnswerSubmit, answerResult }) => {
     // --- NEW ANTI-CHEAT STATE ---
     const [tabSwitched, setTabSwitched] = useState(false);
 
+    
+
     // Effect for the per-question countdown timer
     useEffect(() => {
         setTimeLeft(question.timeLimit);

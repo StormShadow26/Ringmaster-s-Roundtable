@@ -14,6 +14,19 @@ const QuizPage = () => {
     const [answerResult, setAnswerResult] = useState(null);
     const [myScore, setMyScore] = useState(0);
 
+    const token = localStorage.getItem("jwtToken"); // Replace "token" with your key
+    let userId = null;
+
+    if (token) {
+        try {
+            const payloadBase64 = token.split(".")[1]; // JWT payload
+            const decodedPayload = JSON.parse(atob(payloadBase64));
+        userId = decodedPayload.userId || decodedPayload.id; // Adjust based on your token's payload
+        } catch (err) {
+            console.error("Error decoding JWT token:", err);
+        }
+        }
+
     useEffect(() => {
         // Fetch initial quiz status on component mount
         const fetchQuizStatus = async () => {
@@ -56,7 +69,7 @@ const QuizPage = () => {
 
     const handleAnswerSubmit = (questionIndex, optionIndex) => {
         if (answerResult) return; // Prevent re-submission
-        const userId = "68dcc35823b9650c78a9fbff"; // IMPORTANT: Replace with actual user ID
+         // IMPORTANT: Replace with actual user ID
         socket.emit('submit_answer', { quizId: quizInfo._id, questionIndex, selectedOptionIndex: optionIndex, userId });
     };
     
